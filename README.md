@@ -6,7 +6,9 @@ A Web App to display your images along with essential metadata just by putting i
 2. Place your original images inside of the gallery under the <code>images/fulls</code> folder.
 3. Execute <code>python prepareSite.py</code> to generate thumbnails and extract important metadata to display in the gallery!
 4. Host your gallery site, a quick way is through <code>python -m http.server</code> to see your images at [http://127.0.0.1:8000](http://127.0.0.1:8000)!
-5. Enjoy your images!
+5. Enjoy your images! You should see a site like what is shown below.
+
+![](./example.png)
 
 ## Example Portfolios
 1. [Timothy Do](https://timothydo.me/photography)

@@ -63,8 +63,9 @@ def createSampleImages(N=25,size=(4000,3000)):
         cv.imwrite(f'{fullDir}/{i}.jpg',sample)
 
 if __name__ == '__main__':
-    print('Creating Sample Images')
-    createSampleImages()
+    if(len(os.listdir(fullDir)) == 0):
+        print('Creating Sample Images')
+        createSampleImages()
     imgNames = [str(i) for i,imgName in enumerate(os.listdir(fullDir)) if imgName.endswith('.jpg')]
     print('Making Image List!')
     makeImgList()

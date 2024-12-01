@@ -11,6 +11,6 @@ A Web App to display your images along with essential metadata just by putting i
 ![](./example.png)
 
 ## Example Portfolios
-1. [Timothy Do](https://timothydo.me/photography)
+1. [TheDoShoots](https://timothydo.me/photography)
 
 

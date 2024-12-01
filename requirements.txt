@@ -1,0 +1,5 @@
+# Requirements for Preparing Gallery 
+numpy
+opencv-python
+exifread
+tqdm

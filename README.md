@@ -8,9 +8,10 @@ A Web App to display your images along with essential metadata just by putting i
 4. Host your gallery site, a quick way is through <code>python -m http.server</code> to see your images at [http://127.0.0.1:8000](http://127.0.0.1:8000)!
 5. Enjoy your images! You should see a site like what is shown below.
 
-![](./example.png)
+![](./example.gif)
 
 ## Example Portfolios
-1. [TheDoShoots](https://timothydo.me/photography)
+1. [TheDoShoots Astronomy](https://timothydo.me/photography)
+![](./astro.gif)
 
 

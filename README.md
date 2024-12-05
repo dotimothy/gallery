@@ -11,7 +11,8 @@ A Web App to display your images along with essential metadata just by putting i
 ![](./example.gif)
 
 ## Example Portfolios
-1. [TheDoShoots Astronomy](https://timothydo.me/photography)
+1. [TheDoShoots](https://timothydo.me/photography)
+- [Astronomy](https://timothydo.me/astronomy/photography)
 ![](./astro.gif)
 
 

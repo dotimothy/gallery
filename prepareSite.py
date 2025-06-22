@@ -5,9 +5,9 @@ import json
 from tqdm import tqdm
 import exifread
 
-fullDir = './images/fulls'
-thumbDir = './images/thumbs'
-metadataDir ='./images/metadata'
+fullDir = './fulls'
+thumbDir = './thumbs'
+metadataDir ='./metadata'
 for createDir in [fullDir, thumbDir, metadataDir]: 
     if(not(os.path.exists(createDir))): os.mkdir(createDir)
 imgNameJS = './imgNames.js'

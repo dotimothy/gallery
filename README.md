@@ -37,6 +37,7 @@ Here's how to operate the gallery:
     * `Esc`: Reset zoom/pan, or exit viewer if at default zoom.
     * `I`: Toggle metadata.
     * `F`: Toggle fullscreen.
+    * `T`: Collapse thumbnail picker during viewing an image.
 
 ---
 

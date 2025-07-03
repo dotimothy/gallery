@@ -98,7 +98,7 @@
             position: fixed;
             background-color: rgba(0,0,0,0.8);
             width: 100%;
-            max-height: 25%;
+            max-height: 35%; /* Adjusted from 28% */
             bottom: 90px;
             opacity: 0%;
             z-index: 2;
@@ -175,12 +175,83 @@
             #fullViewThumbSelector img { height: 60px; min-width: 60px; }
             #full { max-height: calc(100% - 70px); }
             #full.thumbs-hidden { max-height: 100%; }
-            #metadataViewer { bottom: 70px; max-height: 35%; text-align: left; padding: 10px 15px; }
+            #metadataViewer { bottom: 70px; max-height: 45%; /* Adjusted from 38% */ text-align: left; padding: 10px 15px; }
             #metadataViewer.thumbs-hidden { bottom: 0; }
             #metadataViewer h2 { font-size: 1.2em; }
             #metadataViewer p { font-size: 0.9em; line-height: 1.5; }
             #exitViewer, #toggleMetadata, #home, #fullscreenToggle, #toggleThumbSelector { font-size: 2.2em; }
             #leftArrow, #rightArrow { font-size: 3em; }
+        }
+
+        /* Styles for the new light pollution map iframe modal */
+        #lightPollutionMapOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+        }
+
+        #lightPollutionMapOverlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        #lightPollutionMapContainer {
+            position: relative;
+            width: 90%;
+            max-width: 800px;
+            height: 80%;
+            max-height: 600px;
+            background-color: black;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            transform: scale(0.8);
+            opacity: 0;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease-in-out;
+        }
+
+        #lightPollutionMapOverlay.visible #lightPollutionMapContainer {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        #lightPollutionMapIframe {
+            width: 100%;
+            height: calc(100% - 40px); /* Adjust height for close button */
+            border: none;
+        }
+
+        #lightPollutionMapCloseButton {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            font-size: 1.2em;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1001;
+            transition: background-color 0.2s;
+        }
+
+        #lightPollutionMapCloseButton:hover {
+            background-color: rgba(255, 255, 255, 0.4);
         }
     </style>
 
@@ -405,8 +476,8 @@
                 const mouseRelativeToCenter_X = oldMidpoint.x - viewerRect.left - imageViewerCenterX;
                 const mouseRelativeToCenter_Y = oldMidpoint.y - viewerRect.top - imageViewerCenterY;
 
-                currentPanX = mouseRelativeToCenter_X - (mouseRelativeToCenter_X - currentPanX) * (newScale / oldScale);
-                currentPanY = mouseRelativeToCenter_Y - (mouseRelativeToCenter_Y - currentPanY) * (newScale / oldScale);
+                currentPanX = mouseRelativeToCenter_X - (mouseRelativeToCenter_X - currentPanX) * (currentScale / oldScale);
+                currentPanY = mouseRelativeToCenter_Y - (mouseRelativeToCenter_Y - currentPanY) * (currentScale / oldScale);
 
                 currentScale = newScale;
                 constrainPan();
@@ -588,6 +659,101 @@
             return `${dayOfWeek}, ${month} ${dayOfMonth}, ${year} @ ${hours}:${minutes} ${ampm}`;
         }
 
+        // Helper function to convert GPS values (degrees, minutes, seconds) to decimal degrees
+        function _convertDegrees(valueString) {
+            // Regex to find numbers, including fractions like '252/5'
+            const matches = valueString.match(/(\d+\s*\/\s*\d+|\d+(\.\d+)?)/g);
+
+            if (!matches || matches.length < 3) {
+                console.warn("Invalid GPS coordinate string format:", valueString);
+                return NaN;
+            }
+
+            const parts = matches.map(s => {
+                if (s.includes('/')) {
+                    const [num, den] = s.split('/').map(Number);
+                    return num / den;
+                }
+                return Number(s);
+            });
+
+            const d = parts[0];
+            const m = parts[1];
+            const s = parts[2];
+
+            if (isNaN(d) || isNaN(m) || isNaN(s)) {
+                console.warn("Parsed GPS components are NaN:", parts);
+                return NaN;
+            }
+
+            return d + (m / 60.0) + (s / 3600.0);
+        }
+
+        // Function to get raw GPS coordinates (latitude, longitude)
+        function getRawGpsCoordinates(imgData) {
+            const lat = imgData['GPS GPSLatitude'];
+            const lat_ref = imgData['GPS GPSLatitudeRef'];
+            const lon = imgData['GPS GPSLongitude'];
+            const lon_ref = imgData['GPS GPSLongitudeRef'];
+
+            if (lat && lat_ref && lon && lon_ref) {
+                let latitude = _convertDegrees(lat);
+                if (lat_ref === 'S') {
+                    latitude *= -1;
+                }
+
+                let longitude = _convertDegrees(lon);
+                if (lon_ref === 'W') {
+                    longitude *= -1;
+                }
+
+                if (!isNaN(latitude) && !isNaN(longitude)) {
+                    return { latitude: latitude.toFixed(4), longitude: longitude.toFixed(4) };
+                }
+            }
+            return null; // Return null if GPS data is not available or invalid
+        }
+
+        // Function to show the light pollution map in an iframe modal
+        function showLightPollutionMap(lat, lon) {
+            let overlay = document.getElementById('lightPollutionMapOverlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'lightPollutionMapOverlay';
+                document.body.appendChild(overlay);
+
+                let container = document.createElement('div');
+                container.id = 'lightPollutionMapContainer';
+                overlay.appendChild(container);
+
+                let iframe = document.createElement('iframe');
+                iframe.id = 'lightPollutionMapIframe';
+                iframe.setAttribute('frameborder', '0');
+                iframe.setAttribute('scrolling', 'no');
+                container.appendChild(iframe);
+
+                let closeButton = document.createElement('button');
+                closeButton.id = 'lightPollutionMapCloseButton';
+                closeButton.innerHTML = '✖️';
+                closeButton.onclick = hideLightPollutionMap;
+                container.appendChild(closeButton);
+            }
+
+            const iframeSrc = `https://timothydo.me/astronomy/lightpollution/?lat=${lat}&lon=${lon}`;
+            document.getElementById('lightPollutionMapIframe').src = iframeSrc;
+            overlay.classList.add('visible');
+        }
+
+        // Function to hide the light pollution map iframe modal
+        function hideLightPollutionMap() {
+            let overlay = document.getElementById('lightPollutionMapOverlay');
+            if (overlay) {
+                overlay.classList.remove('visible');
+                // Optionally clear iframe src to stop any ongoing processes
+                document.getElementById('lightPollutionMapIframe').src = 'about:blank';
+            }
+        }
+
         function viewMetadata(imgName) {
             let metadataViewerEl = document.getElementById('metadataViewer');
             if (!metadataViewerEl) return;
@@ -600,8 +766,8 @@
             } else {
                 let cameraModel = imgData['Image Model'] || 'N/A';
                 let captureDate = imgData['Image DateTime'] ? exifToDate(imgData['Image DateTime']) : 'N/A';
-                let width = imgData['EXIF ExifImageWidth'] || imgData['EXIF ImageWidth'] || 'N/A';
-                let height = imgData['EXIF ExifImageLength'] || imgData['EXIF ImageLength'] || 'N/A';
+                let width = imgData['Image Width'] || 'N/A';
+                let height = imgData['Image Height'] || 'N/A';
                 let resolution = (width !== 'N/A' && height !== 'N/A') ? (parseFloat(width)*parseFloat(height)/(10**6)).toFixed(1) : 'N/A';
                 let fileSizeMB = imgData['File Size'] ? (parseFloat(imgData['File Size'])/(1000**2)).toFixed(2) : 'N/A';
                 let ISO = imgData['EXIF ISOSpeedRatings'] ? String(eval(imgData['EXIF ISOSpeedRatings'])) : 'N/A';
@@ -610,9 +776,19 @@
                 let fNumber = imgData['EXIF FNumber'] ? String(eval(imgData['EXIF FNumber'])) : 'N/A';
                 let focalLength35 = imgData['EXIF FocalLengthIn35mmFilm'] ? String(eval(imgData['EXIF FocalLengthIn35mmFilm'])) : 'N/A';
                 let ev = imgData['EXIF ExposureBiasValue'] ? String(eval(imgData['EXIF ExposureBiasValue'])) : 'N/A';
+                
+                let gpsCoords = getRawGpsCoordinates(imgData);
+                let gpsCoordinatesDisplay;
+
+                if (gpsCoords) {
+                    gpsCoordinatesDisplay = `<span style="cursor: pointer; text-decoration: underline;" onclick="showLightPollutionMap(${gpsCoords.latitude}, ${gpsCoords.longitude})">${gpsCoords.latitude}, ${gpsCoords.longitude}</span>`;
+                } else {
+                    gpsCoordinatesDisplay = 'N/A';
+                }
 
                 htmlContent += `<h2>${imgName}.jpg</h2>`;
-                htmlContent += `<p>🗓️ ${captureDate !== 'N/A' ? formatDate(captureDate) : 'N/A'}</p>`;
+                htmlContent += `<p>🗓️: ${captureDate !== 'N/A' ? formatDate(captureDate) : 'N/A'}</p>`; // Added colon
+                htmlContent += `<p>📍: ${gpsCoordinatesDisplay}</p>`; // Hardcoded pin emoji and reordered
                 htmlContent += `<p>📷: ${cameraModel}</p>`;
                 htmlContent += `<p>${fileSizeMB} MB | ${width}x${height} | ${resolution} MP</p>`;
                 htmlContent += `<p>ISO ${ISO} | ${focalLength35}mm | ${ev}ev | F${fNumber} | ${exposureTime}" s</p>`;
@@ -662,6 +838,9 @@
         function exitView() {
             removeViewerEventListeners();
             homeButton.hidden = false;
+
+            // Close the light pollution map iframe if it's open
+            hideLightPollutionMap();
 
             if(document.fullscreenElement && madeFullscreen) {
                 if (document.exitFullscreen) document.exitFullscreen();

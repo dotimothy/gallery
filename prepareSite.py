@@ -6,6 +6,8 @@ from tqdm import tqdm
 import exifread
 import shutil
 from datetime import datetime
+from PIL import Image
+from PIL.ExifTags import TAGS
 
 fullDir = './fulls'
 thumbDir = './thumbs'
@@ -22,6 +24,29 @@ for createDir in [fullDir, thumbDir, metadataDir]:
 metadataJSON = './metadata/metadata.json'
 
 imgNames = []
+
+def _convert_to_degrees(value):
+    d = float(value.values[0].numerator) / value.values[0].denominator
+    m = float(value.values[1].numerator) / value.values[1].denominator
+    s = float(value.values[2].numerator) / value.values[2].denominator
+    return d + (m / 60.0) + (s / 3600.0)
+
+def get_gps_coordinates(tags):
+    lat = tags.get('GPS GPSLatitude')
+    lat_ref = tags.get('GPS GPSLatitudeRef')
+    lon = tags.get('GPS GPSLongitude')
+    lon_ref = tags.get('GPS GPSLongitudeRef')
+
+    if lat and lat_ref and lon and lon_ref:
+        latitude = _convert_to_degrees(lat)
+        if str(lat_ref) == 'S':
+            latitude *= -1
+
+        longitude = _convert_to_degrees(lon)
+        if str(lon_ref) == 'W':
+            longitude *= -1
+        return latitude, longitude
+    return None
 
 def getThumbs(check=False,size=(400,300)):
     for name in tqdm(imgNames, desc="Making Thumbnails"):
@@ -53,12 +78,34 @@ def getMetadatas(check=False):
         
         if not check or name not in all_metadata or "Error" in all_metadata.get(name, {}):
             try:
-                with open(fullPath,'rb') as full:
-                    tags = exifread.process_file(full)
+                with open(fullPath,'rb') as full_file:
+                    tags = exifread.process_file(full_file)
                     metadata = {}
                 for tag in tags.keys():
                     if tag not in ('JPEGThumbnail', 'TIFFThumbnail'):
                         metadata[tag] = str(tags[tag])
+
+                # Get width and height from PIL.Image if not already in EXIF
+                try:
+                    with Image.open(fullPath) as img_pil:
+                        if 'Image Width' not in metadata:
+                            metadata['Image Width'] = img_pil.width
+                        if 'Image Height' not in metadata:
+                            metadata['Image Height'] = img_pil.height
+                except Exception as e:
+                    print(f"Warning: Could not get dimensions for {name}.jpg: {e}")
+                    if 'Image Width' not in metadata:
+                        metadata['Image Width'] = 'N/A'
+                    if 'Image Height' not in metadata:
+                        metadata['Image Height'] = 'N/A'
+
+                # Store raw GPS EXIF tags, index.html will handle formatting
+                if tags.get('GPS GPSLatitude') and tags.get('GPS GPSLongitude'):
+                    metadata['GPS GPSLatitude'] = str(tags['GPS GPSLatitude'])
+                    metadata['GPS GPSLatitudeRef'] = str(tags['GPS GPSLatitudeRef'])
+                    metadata['GPS GPSLongitude'] = str(tags['GPS GPSLongitude'])
+                    metadata['GPS GPSLongitudeRef'] = str(tags['GPS GPSLongitudeRef'])
+
                 metadata['File Size'] = getFileSize(fullPath)
                 all_metadata[name] = metadata
             except Exception as e:

@@ -48,7 +48,7 @@ def get_gps_coordinates(tags):
         return latitude, longitude
     return None
 
-def getThumbs(check=False,size=(400,300)):
+def getThumbs(check=False,size=(1200,900)):
     for name in tqdm(imgNames, desc="Making Thumbnails"):
         thumbPath = f'./{thumbDir}/{name}.jpg'
         fullPath = f'{fullDir}/{name}.jpg'
@@ -119,8 +119,8 @@ def getMetadatas(check=False):
 
 def createSampleImages(N=25,size=(4000,3000)):
     for i in tqdm(range(N), desc="Creating Sample Images"):
-        sample = np.zeros(size,np.uint8)
-        cv.putText(sample,str(i),(size[1]//2,size[0]//2),cv.FONT_HERSHEY_SIMPLEX,10,255,20,cv.LINE_AA)
+        sample = np.zeros(size[::-1],np.uint8)
+        cv.putText(sample,str(i),(size[0]//2,size[1]//2),cv.FONT_HERSHEY_SIMPLEX,10,255,20,cv.LINE_AA)
         sample = cv.copyMakeBorder(sample,100,100,100,100,cv.BORDER_CONSTANT,None,value=255)
         sample = cv.copyMakeBorder(sample,75,75,75,75,cv.BORDER_CONSTANT,None,value=0)
         cv.imwrite(f'{fullDir}/{i}.jpg',sample)

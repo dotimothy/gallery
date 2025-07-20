@@ -6,12 +6,12 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📷</text></svg>">
-        <link href='https://fonts.googleapis.com/css?family=Product+Sans' rel='stylesheet' type='text/css'>
+        <link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet' type='text/css'>
     </head>
 
     <style>
         body { background-color: black; }
-        h1, h2, p { color: white; font-family: 'Product Sans', sans-serif; }
+        h1, h2, p { color: white; font-family: 'Roboto', sans-serif; }
         h1 { font-size: 3em; font-weight: bolder; }
         h2 { font-size: 2em; }
         p { font-size: 1.5em; font-weight: lighter; }
@@ -109,7 +109,7 @@
             overflow-y: auto;
             color: white;
             padding: 15px 20px;
-            font-family: 'Product Sans', sans-serif;
+            font-family: 'Roboto', sans-serif;
             text-align: center;
         }
         #metadataViewer.active { opacity: 0.9; }
@@ -267,7 +267,7 @@
         let revealInterval, revealCounter = 0, galleryCounter = 0, galleryDuration = 1500, galleryInterval;
         let isMobile, keyAction, swipeThresh = 75, touchstartX = 0, touchendX = 0, madeFullscreen = false;
         let titleElement, j = 0;
-        const completedTitle = `📷 Gallery Template!!! 📷`;
+        const completedTitle = `📷 Gallery Template!!! �`;
         let homeButton; 
 
         let currentScale = 1.0, currentPanX = 0, currentPanY = 0, isPanningImage = false;
@@ -559,7 +559,7 @@
             if(madeFullscreen) document.body.requestFullscreen();
 
             const existingFullImg = document.getElementById('full');
-            if (existingFullImg) existingFullImg.remove();
+            if (existingFullImg) existingImg.remove();
 
             const fullImg = new Image();
             fullImg.id = 'full';
@@ -837,7 +837,10 @@
 
         function exitView() {
             removeViewerEventListeners();
-            homeButton.hidden = false;
+            // Only show home button if not in an iframe
+            if (window.self === window.top) {
+                homeButton.hidden = false;
+            }
 
             // Close the light pollution map iframe if it's open
             hideLightPollutionMap();
@@ -985,7 +988,10 @@
                 }
             };
 
-            if (window.self !== window.top) homeButton.hidden = true;
+            // Check if the page is in an iframe and hide the home button if it is
+            if (window.self !== window.top) {
+                homeButton.hidden = true;
+            }
         };
 
         document.addEventListener('fullscreenchange', function(e) {

@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image EXIF Editor</title>
+    <!-- Link to Tailwind CSS CDN for easy styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Link to Google Fonts for the 'Inter' font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS for OpenStreetMap -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <style>
+        /* Apply the Inter font and a dark background to the body */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Dark gray background */
+            color: #e2e8f0; /* Light text color */
+        }
+        /* Styling for the main content container */
+        .container {
+            max-width: 960px; /* Max width for readability */
+            margin: 2rem auto; /* Center the container with vertical margin */
+            padding: 2rem;
+            background-color: #2d3748; /* Darker background for the content area */
+            border-radius: 0.75rem; /* Rounded corners */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3); /* More pronounced shadow for dark mode */
+        }
+        /* Styling for form groups (label + input) */
+        .form-group label {
+            display: block; /* Each label on its own line */
+            margin-bottom: 0.5rem;
+            font-weight: 600; /* Semi-bold font for labels */
+            color: #cbd5e0; /* Lighter gray for labels */
+        }
+        /* Styling for input and select elements */
+        .form-group input, .form-group select {
+            width: 100%; /* Full width within their container */
+            padding: 0.75rem;
+            border: 1px solid #4a5568; /* Darker border */
+            border-radius: 0.5rem; /* Rounded corners */
+            font-size: 1rem;
+            background-color: #242c38; /* Dark input background */
+            color: #e2e8f0; /* Light text in inputs */
+            transition: border-color 0.2s, box-shadow 0.2s; /* Smooth transition for focus states */
+        }
+        /* Focus styles for inputs and selects */
+        .form-group input:focus, .form-group select:focus {
+            outline: none; /* Remove default outline */
+            border-color: #6366f1; /* Indigo border on focus */
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4); /* Soft shadow on focus */
+        }
+        /* General button styling */
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s; /* Smooth transitions */
+            border: none; /* Remove default button border */
+        }
+        /* Primary button styling */
+        .btn-primary {
+            background-color: #4f46e5; /* Indigo background */
+            color: #fff; /* White text */
+        }
+        .btn-primary:hover {
+            background-color: #4338ca; /* Darker indigo on hover */
+            box-shadow: 0 6px 10px rgba(79, 70, 229, 0.3); /* Enhanced shadow on hover */
+        }
+        /* Styling for individual image cards */
+        .image-card {
+            border: 1px solid #4a5568; /* Darker border */
+            border-radius: 0.75rem; /* Rounded corners */
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background-color: #2d3748; /* Dark background for cards */
+            display: flex; /* Use flexbox for layout */
+            align-items: center; /* Vertically align items */
+            gap: 1rem; /* Space between image and text */
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); /* Subtle shadow */
+            cursor: pointer; /* Indicate clickable */
+            transition: transform 0.2s, box-shadow 0.2s; /* Smooth hover effects */
+        }
+        .image-card:hover {
+            transform: translateY(-2px); /* Slight lift on hover */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); /* More pronounced shadow on hover */
+        }
+        /* Styling for the image thumbnail within the card */
+        .image-card img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover; /* Cover the area, cropping if necessary */
+            border-radius: 0.5rem; /* Rounded corners for the image */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Small shadow for the image */
+        }
+        /* Styling for EXIF data paragraphs */
+        .exif-data p {
+            font-size: 0.875rem; /* Smaller font size */
+            color: #a0aec0; /* Muted light text color */
+            margin-bottom: 0.25rem; /* Small margin between lines */
+            word-break: break-all; /* Break long words if necessary */
+        }
+        .exif-data p strong {
+            color: #cbd5e0; /* Lighter strong text */
+        }
+        /* Styling for the map container */
+        #map {
+            height: 400px; /* Fixed height for the map */
+            width: 100%; /* Full width */
+            border-radius: 0.5rem; /* Rounded corners for the map */
+            margin-top: 1rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid #4a5568; /* Darker border around the map */
+            z-index: 0; /* Ensure map layers are correctly rendered */
+        }
+        /* Styling for the message box */
+        #message-box {
+            background-color: #3a3a00; /* Darker yellow background for dark mode */
+            border: 1px solid #8b5e00; /* Darker yellow border */
+            color: #fbd38d; /* Lighter yellow text */
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            text-align: center;
+            font-size: 0.9rem;
+            display: none; /* Hidden by default */
+        }
+        /* Adjusting specific message box types for dark mode */
+        #message-box[style*="background-color: rgb(254, 242, 242)"] { /* error */
+            background-color: #4a0000 !important;
+            border-color: #8b0000 !important;
+            color: #fca5a5 !important;
+        }
+        #message-box[style*="background-color: rgb(236, 253, 245)"] { /* success */
+            background-color: #004a00 !important;
+            border-color: #008b00 !important;
+            color: #90ee90 !important;
+        }
+        /* Readonly input background for dark mode */
+        .bg-gray-100 {
+            background-color: #242c38 !important; /* Darker background for readonly inputs */
+            color: #e2e8f0 !important; /* Light text for readonly inputs */
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="container">
+        <h1 class="text-3xl font-bold text-center mb-6 text-gray-100">Image EXIF Editor</h1>
+
+        <h2 class="text-2xl font-semibold mb-4 text-gray-200">Modify EXIF Data</h2>
+        <!-- Message box for user feedback -->
+        <div id="message-box" role="alert"></div>
+
+        <!-- Form to submit EXIF modification requests -->
+        <form action="{{ url_for('modify_exif') }}" method="POST" class="space-y-6">
+            <div class="form-group">
+                <label for="filename">Select Image:</label>
+                <!-- Dropdown to select which image to modify -->
+                <select name="filename" id="filename" class="focus:ring-indigo-500 focus:border-indigo-500">
+                    {% for image in images %}
+                        <option value="{{ image.filename }}">{{ image.filename }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- GPS Coordinates section with map -->
+            <div class="form-group">
+                <label class="block mb-2 text-lg font-medium text-gray-200">Set GPS Coordinates:</label>
+                <div class="flex space-x-2 mb-3">
+                    <input type="text" id="location-search" placeholder="Search for a location..." class="flex-grow p-2 border border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                    <button type="button" id="search-button" class="btn btn-primary px-4 py-2">Search</button>
+                </div>
+                <div id="map"></div> <!-- Map container -->
+                <p class="text-sm text-gray-400 mt-2">Click on the map or search for a location to set the coordinates.</p>
+                
+                <!-- Hidden inputs to store latitude and longitude -->
+                <input type="hidden" id="latitude" name="latitude">
+                <input type="hidden" id="longitude" name="longitude">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                    <div class="form-group">
+                        <label for="display-latitude">Current Latitude:</label>
+                        <input type="text" id="display-latitude" class="bg-gray-100 cursor-not-allowed" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="display-longitude">Current Longitude:</label>
+                        <input type="text" id="display-longitude" class="bg-gray-100 cursor-not-allowed" readonly>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grid layout for artist and copyright inputs -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="form-group">
+                    <label for="artist">Artist:</label>
+                    <input type="text" id="artist" name="artist" placeholder="e.g., John Doe" class="focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div class="form-group">
+                    <label for="copyright">Copyright:</label>
+                    <input type="text" id="copyright" name="copyright" placeholder="e.g., © 2023 My Company" class="focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+            </div>
+
+            <!-- Submit button for the form -->
+            <button type="submit" class="btn btn-primary w-full shadow-md hover:shadow-lg">Modify EXIF Data</button>
+        </form>
+
+        <hr class="my-8 border-gray-700"> <!-- Horizontal rule for separation -->
+
+        <div class="mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-200">Images in 'fulls' directory:</h2>
+            {% if images %}
+                <!-- Grid layout for image cards, responsive across screen sizes -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for image in images %}
+                        <div class="image-card" onclick="selectImage('{{ image.filename }}')">
+                            <!-- Display image thumbnail, linked to the actual image file -->
+                            <img src="{{ url_for('serve_image', filename=image.filename) }}" alt="{{ image.filename }}" class="shadow-sm">
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-100">{{ image.filename }}</h3>
+                                <div class="exif-data mt-2">
+                                    {% if image.exif %}
+                                        <!-- Loop through and display extracted EXIF data -->
+                                        {% for key, value in image.exif.items() %}
+                                            <p><strong class="font-medium">{{ key }}:</strong> {{ value }}</p>
+                                        {% endfor %}
+                                    {% else %}
+                                        <p class="text-gray-400">No EXIF data found.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-gray-400">No images found in the 'fulls' directory. Please add some .jpg or .png files.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        let map;
+        let marker;
+        const messageBox = document.getElementById('message-box');
+
+        function showMessageBox(message, type = 'info') {
+            messageBox.textContent = message;
+            messageBox.style.display = 'block';
+            // Optional: Add different styling based on type (e.g., 'error', 'success')
+            if (type === 'error') {
+                messageBox.style.backgroundColor = '#fef2f2';
+                messageBox.style.borderColor = '#fca5a5';
+                messageBox.style.color = '#dc2626';
+            } else if (type === 'success') {
+                messageBox.style.backgroundColor = '#ecfdf5';
+                messageBox.style.borderColor = '#34d399';
+                messageBox.style.color = '#065f46';
+            } else { // info
+                messageBox.style.backgroundColor = '#fefcbf';
+                messageBox.style.borderColor = '#fcd34d';
+                messageBox.style.color = '#92400e';
+            }
+            // Hide after 5 seconds
+            setTimeout(() => {
+                messageBox.style.display = 'none';
+            }, 5000);
+        }
+
+        function initMap() {
+            // Initialize the map centered on a default location (e.g., San Francisco)
+            map = L.map('map').setView([37.7749, -122.4194], 10);
+
+            // Add OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Create a single marker that can be moved
+            marker = L.marker(map.getCenter(), { draggable: true }).addTo(map);
+
+            // Update coordinates when the map is clicked
+            map.on('click', (e) => {
+                placeMarkerAndPanTo(e.latlng);
+            });
+
+            // Update coordinates when the marker is dragged
+            marker.on('dragend', () => {
+                const latLng = marker.getLatLng();
+                updateCoordinates(latLng.lat, latLng.lng);
+            });
+
+            // Handle location search
+            document.getElementById('search-button').addEventListener('click', () => {
+                const address = document.getElementById('location-search').value;
+                if (address) {
+                    // Use Nominatim for geocoding
+                    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+                    fetch(nominatimUrl)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data && data.length > 0) {
+                                const lat = parseFloat(data[0].lat);
+                                const lon = parseFloat(data[0].lon);
+                                placeMarkerAndPanTo(L.latLng(lat, lon));
+                            } else {
+                                showMessageBox('No results found for that location.', 'info');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error during geocoding:', error);
+                            showMessageBox('Error searching for location. Please try again.', 'error');
+                        });
+                } else {
+                    showMessageBox('Please enter a location to search.', 'info');
+                }
+            });
+
+            // Initial update of coordinates based on map's initial center
+            updateCoordinates(map.getCenter().lat, map.getCenter().lng);
+        }
+
+        function placeMarkerAndPanTo(latLng) {
+            marker.setLatLng(latLng); // Move the marker
+            map.setView(latLng, map.getZoom()); // Center the map on the new location, keep current zoom
+            updateCoordinates(latLng.lat, latLng.lng); // Update form fields
+        }
+
+        function updateCoordinates(lat, lng) {
+            // Update the hidden input fields for form submission
+            document.getElementById('latitude').value = lat.toFixed(6);
+            document.getElementById('longitude').value = lng.toFixed(6);
+
+            // Update the display-only input fields
+            document.getElementById('display-latitude').value = lat.toFixed(6);
+            document.getElementById('display-longitude').value = lng.toFixed(6);
+        }
+
+        // Function to select an image from the dropdown when its preview is clicked
+        function selectImage(filename) {
+            document.getElementById('filename').value = filename;
+            showMessageBox(`Selected image: ${filename}`, 'success');
+        }
+
+        // Initialize the map when the window loads
+        window.onload = initMap;
+    </script>
+</body>
+</html>

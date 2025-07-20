@@ -556,7 +556,7 @@
             if(gallery) gallery.classList.add('pointer-events-none');
             
             madeFullscreen = doFullscreen && !document.fullscreenElement;
-            if(madeFullscreen) document.body.requestFullscreen();
+            if(madeFullscreen) document.documentElement.requestFullscreen();
 
             const existingFullImg = document.getElementById('full');
             if (existingFullImg) existingImg.remove();

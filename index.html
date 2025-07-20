@@ -267,7 +267,7 @@
         let revealInterval, revealCounter = 0, galleryCounter = 0, galleryDuration = 1500, galleryInterval;
         let isMobile, keyAction, swipeThresh = 75, touchstartX = 0, touchendX = 0, madeFullscreen = false;
         let titleElement, j = 0;
-        const completedTitle = `📷 Gallery Template!!! �`;
+        const completedTitle = `📷 Gallery Template!!! 📷`;
         let homeButton; 
 
         let currentScale = 1.0, currentPanX = 0, currentPanY = 0, isPanningImage = false;
@@ -877,6 +877,7 @@
             if(j < completedTitle.length) {
                 titleElement.innerHTML += completedTitle[j];
                 j++;
+                
             } else {
                  clearInterval(titleInterval);
             }

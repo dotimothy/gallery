@@ -143,6 +143,24 @@
             background-color: #242c38 !important; /* Darker background for readonly inputs */
             color: #e2e8f0 !important; /* Light text for readonly inputs */
         }
+        /* Styling for the large image preview */
+        #image-preview-container {
+            text-align: center;
+            margin-top: 1.5rem;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: #2d3748;
+            border-radius: 0.75rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        #image-preview {
+            max-width: 100%;
+            height: auto;
+            max-height: 300px; /* Limit height for larger images */
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            object-fit: contain; /* Ensure the whole image is visible */
+        }
     </style>
 </head>
 <body class="p-4">
@@ -158,11 +176,17 @@
             <div class="form-group">
                 <label for="filename">Select Image:</label>
                 <!-- Dropdown to select which image to modify -->
-                <select name="filename" id="filename" class="focus:ring-indigo-500 focus:border-indigo-500">
+                <select name="filename" id="filename" class="focus:ring-indigo-500 focus:border-indigo-500" onchange="updateImagePreview()">
                     {% for image in images %}
                         <option value="{{ image.filename }}">{{ image.filename }}</option>
                     {% endfor %}
                 </select>
+            </div>
+
+            <!-- Image Preview Container -->
+            <div id="image-preview-container">
+                <img id="image-preview" src="" alt="Selected Image Preview" class="hidden">
+                <p id="no-image-selected" class="text-gray-400">No image selected for preview.</p>
             </div>
 
             <!-- GPS Coordinates section with map -->
@@ -247,23 +271,26 @@
         let map;
         let marker;
         const messageBox = document.getElementById('message-box');
+        const imagePreview = document.getElementById('image-preview');
+        const noImageSelectedText = document.getElementById('no-image-selected');
+        const filenameSelect = document.getElementById('filename');
 
         function showMessageBox(message, type = 'info') {
             messageBox.textContent = message;
             messageBox.style.display = 'block';
             // Optional: Add different styling based on type (e.g., 'error', 'success')
             if (type === 'error') {
-                messageBox.style.backgroundColor = '#fef2f2';
-                messageBox.style.borderColor = '#fca5a5';
-                messageBox.style.color = '#dc2626';
+                messageBox.style.backgroundColor = '#4a0000';
+                messageBox.style.borderColor = '#8b0000';
+                messageBox.style.color = '#fca5a5';
             } else if (type === 'success') {
-                messageBox.style.backgroundColor = '#ecfdf5';
-                messageBox.style.borderColor = '#34d399';
-                messageBox.style.color = '#065f46';
+                messageBox.style.backgroundColor = '#004a00';
+                messageBox.style.borderColor = '#008b00';
+                messageBox.style.color = '#90ee90';
             } else { // info
-                messageBox.style.backgroundColor = '#fefcbf';
-                messageBox.style.borderColor = '#fcd34d';
-                messageBox.style.color = '#92400e';
+                messageBox.style.backgroundColor = '#3a3a00';
+                messageBox.style.borderColor = '#8b5e00';
+                messageBox.style.color = '#fbd38d';
             }
             // Hide after 5 seconds
             setTimeout(() => {
@@ -342,12 +369,30 @@
 
         // Function to select an image from the dropdown when its preview is clicked
         function selectImage(filename) {
-            document.getElementById('filename').value = filename;
+            filenameSelect.value = filename;
+            updateImagePreview(); // Call updateImagePreview to show the newly selected image
             showMessageBox(`Selected image: ${filename}`, 'success');
         }
 
-        // Initialize the map when the window loads
-        window.onload = initMap;
+        // Function to update the large image preview
+        function updateImagePreview() {
+            const selectedFilename = filenameSelect.value;
+            if (selectedFilename) {
+                imagePreview.src = `{{ url_for('serve_image', filename='') }}${selectedFilename}`;
+                imagePreview.classList.remove('hidden');
+                noImageSelectedText.classList.add('hidden');
+            } else {
+                imagePreview.src = '';
+                imagePreview.classList.add('hidden');
+                noImageSelectedText.classList.remove('hidden');
+            }
+        }
+
+        // Initialize map and image preview when the window loads
+        window.onload = () => {
+            initMap();
+            updateImagePreview(); // Call on load to show initial selection
+        };
     </script>
 </body>
 </html>

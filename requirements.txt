@@ -4,3 +4,4 @@ opencv-python
 exifread
 tqdm
 pillow
+piexif

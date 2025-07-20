@@ -121,7 +121,7 @@ def index():
         return f"An unexpected error occurred: {e}", 500
 
     # Render the index.html template, passing the list of images
-    return render_template('index.html', images=images)
+    return render_template('exif.html', images=images)
 
 @app.route('/modify_exif', methods=['POST'])
 def modify_exif():

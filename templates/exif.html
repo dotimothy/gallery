@@ -243,6 +243,7 @@
                 <div class="flex space-x-2 mb-3">
                     <input type="text" id="location-search" placeholder="Search for a location..." class="flex-grow p-2 border border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
                     <button type="button" id="search-button" class="btn btn-primary px-4 py-2">Search</button>
+                    <button type="button" id="get-current-location-button" class="btn bg-blue-600 hover:bg-blue-700 text-white px-4 py-2">Get Current Location</button>
                 </div>
                 <div id="map"></div> <!-- Map container -->
                 <p class="text-sm text-gray-400 mt-2">Click on the map or search for a location to set the coordinates.</p>
@@ -341,8 +342,9 @@
         const artistInput = document.getElementById('artist');
         const copyrightInput = document.getElementById('copyright');
 
-        // Finished button
+        // Buttons
         const finishedButton = document.getElementById('finished-button');
+        const getCurrentLocationButton = document.getElementById('get-current-location-button');
 
 
         // Pagination variables
@@ -409,6 +411,7 @@
                                 const lat = parseFloat(data[0].lat);
                                 const lon = parseFloat(data[0].lon);
                                 placeMarkerAndPanTo(L.latLng(lat, lon));
+                                showMessageBox('Location found and map updated.', 'success');
                             } else {
                                 showMessageBox('No results found for that location.', 'info');
                             }
@@ -621,6 +624,41 @@
             });
         }
 
+        // Function to get current location
+        function getCurrentLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        placeMarkerAndPanTo(L.latLng(lat, lon));
+                        showMessageBox('Current location retrieved successfully!', 'success');
+                    },
+                    (error) => {
+                        let errorMessage = 'Error getting current location: ';
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage += "User denied the request for Geolocation.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage += "Location information is unavailable.";
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage += "The request to get user location timed out.";
+                                break;
+                            case error.UNKNOWN_ERROR:
+                                errorMessage += "An unknown error occurred.";
+                                break;
+                        }
+                        console.error(errorMessage, error);
+                        showMessageBox(errorMessage, 'error');
+                    }
+                );
+            } else {
+                showMessageBox('Geolocation is not supported by this browser.', 'error');
+            }
+        }
+
         // Initialize map and image preview when the window loads
         window.onload = () => {
             initMap();
@@ -633,6 +671,8 @@
 
             // Attach event listener to the Finished button
             finishedButton.addEventListener('click', sendShutdownRequest);
+            // Attach event listener to the Get Current Location button
+            getCurrentLocationButton.addEventListener('click', getCurrentLocation);
         };
 
         // Pagination button event listeners

@@ -553,8 +553,19 @@
                 let exifHtml = '<p class="text-gray-400">No EXIF data found.</p>';
                 if (image.exif && Object.keys(image.exif).length > 0) {
                     exifHtml = '';
-                    for (const key in image.exif) {
-                        exifHtml += `<p><strong class="font-medium">${key}:</strong> ${image.exif[key]}</p>`;
+                    // Only show GPS and Date Taken in thumbnails
+                    if (image.exif.GPSLatitude && image.exif.GPSLongitude) {
+                        exifHtml += `<p><strong class="font-medium">GPS:</strong> ${image.exif.GPSLatitude}, ${image.exif.GPSLongitude}</p>`;
+                    }
+                    if (image.exif.DateTimeOriginal) {
+                        exifHtml += `<p><strong class="font-medium">Date Taken:</strong> ${image.exif.DateTimeOriginal}</p>`;
+                    } else if (image.exif.DateTime) { // Fallback to general DateTime if Original is not present
+                        exifHtml += `<p><strong class="font-medium">Date/Time:</strong> ${image.exif.DateTime}</p>`;
+                    }
+                    
+                    // If no specific data is found but other EXIF exists, show a generic message
+                    if (exifHtml === '') {
+                        exifHtml = '<p class="text-gray-400">Other EXIF data available.</p>';
                     }
                 }
 

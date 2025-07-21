@@ -5,3 +5,5 @@ exifread
 tqdm
 pillow
 piexif
+Werkzeug
+flask

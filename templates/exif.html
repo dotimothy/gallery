@@ -600,13 +600,16 @@
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                // You might send a small payload if needed, but for shutdown, it's often empty
                 body: JSON.stringify({}) 
             })
             .then(response => {
                 if (response.ok) {
                     console.log('Shutdown request sent successfully.');
                     showMessageBox('Application is shutting down...', 'info');
+                    // Attempt to close the window after a short delay
+                    setTimeout(() => {
+                        window.close();
+                    }, 1000); // 1-second delay
                 } else {
                     console.error('Failed to send shutdown request.');
                     showMessageBox('Failed to shut down application.', 'error');
@@ -648,15 +651,20 @@
         });
 
         // Attach event listener for window closing/refreshing
-        // Note: Browsers often prevent custom messages or synchronous requests on beforeunload for security/UX.
-        // The fetch request here is asynchronous, so its success is not guaranteed before the tab closes.
-        // It's primarily for best-effort shutdown.
+        let shutdownSentOnUnload = false; // Flag to prevent multiple calls
         window.addEventListener('beforeunload', (event) => {
-            // This is a best-effort attempt. The browser might kill the process before the request completes.
-            sendShutdownRequest();
-            // To prompt the user before closing (optional, often annoying):
+            if (!shutdownSentOnUnload) {
+                // Use navigator.sendBeacon for a more reliable, non-blocking request on unload
+                // It's designed for analytics/logging and is sent even if the page is closing.
+                const data = JSON.stringify({});
+                navigator.sendBeacon('/shutdown', new Blob([data], { type: 'application/json' }));
+                console.log('Shutdown beacon sent on beforeunload.');
+                shutdownSentOnUnload = true; // Mark as sent
+            }
+            // No need to prevent default or set returnValue for a silent beacon.
+            // If you want to prompt the user, you'd uncomment these:
             // event.preventDefault();
-            // event.returnValue = ''; // Required for some older browsers to show prompt
+            // event.returnValue = '';
         });
     </script>
 </body>

@@ -5,6 +5,7 @@ from PIL import Image
 import base64
 import io
 import argparse
+import sys # Import sys for sys.exit()
 
 # Initialize the Flask application
 app = Flask(__name__)
@@ -353,11 +354,21 @@ def shutdown():
     Shuts down the Flask application.
     This endpoint is called by the 'Finished' button and on window.beforeunload.
     """
+    print("Shutdown request received.")
     func = request.environ.get('werkzeug.server.shutdown')
     if func is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
-    func()
-    return 'Server shutting down...'
+        print("Not running with the Werkzeug Server or shutdown function not available. Attempting sys.exit().")
+        # For development, a direct exit might be acceptable if Werkzeug shutdown isn't available.
+        # In a production environment, this would be highly discouraged.
+        sys.exit(0) # Exit the Python process
+        # return 'Server cannot be shut down this way. Please stop it manually.', 500 # This line won't be reached if sys.exit() works
+    try:
+        func()
+        print("Werkzeug server shutdown function called.")
+        return 'Server shutting down...', 200
+    except Exception as e:
+        print(f"Error during Werkzeug server shutdown: {e}")
+        return f"Error shutting down server: {e}", 500
 
 # --- Main execution block ---
 if __name__ == '__main__':

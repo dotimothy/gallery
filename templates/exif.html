@@ -193,6 +193,50 @@
                 </select>
             </div>
 
+            <!-- Display EXIF Data (Read-only) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="form-group">
+                    <label for="display-make">Make:</label>
+                    <input type="text" id="display-make" class="bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="display-model">Model:</label>
+                    <input type="text" id="display-model" class="bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="display-datetime-original">Date/Time Original:</label>
+                    <input type="text" id="display-datetime-original" class="bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="display-exposure-time">Exposure Time:</label>
+                    <input type="text" id="display-exposure-time" class="bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="display-fnumber">F-Number:</label>
+                    <input type="text" id="display-fnumber" class="bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="display-iso">ISO Speed Ratings:</label>
+                    <input type="text" id="display-iso" class="bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="display-focal-length">Focal Length:</label>
+                    <input type="text" id="display-focal-length" class="bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="display-flash">Flash:</label>
+                    <input type="text" id="display-flash" class="bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="display-metering-mode">Metering Mode:</label>
+                    <input type="text" id="display-metering-mode" class="bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="display-resolution">Resolution:</label>
+                    <input type="text" id="display-resolution" class="bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+            </div>
+
             <!-- GPS Coordinates section with map -->
             <div class="form-group">
                 <label class="block mb-2 text-lg font-medium text-gray-200">Set GPS Coordinates:</label>
@@ -219,7 +263,7 @@
                 </div>
             </div>
 
-            <!-- Grid layout for artist and copyright inputs -->
+            <!-- Grid layout for artist and copyright inputs (editable) -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="form-group">
                     <label for="artist">Artist:</label>
@@ -277,6 +321,23 @@
         const filenameSelect = document.getElementById('filename');
         const displayLatitudeInput = document.getElementById('display-latitude');
         const displayLongitudeInput = document.getElementById('display-longitude');
+
+        // New EXIF display fields
+        const displayMake = document.getElementById('display-make');
+        const displayModel = document.getElementById('display-model');
+        const displayDateTimeOriginal = document.getElementById('display-datetime-original');
+        const displayExposureTime = document.getElementById('display-exposure-time');
+        const displayFNumber = document.getElementById('display-fnumber');
+        const displayISO = document.getElementById('display-iso');
+        const displayFocalLength = document.getElementById('display-focal-length');
+        const displayFlash = document.getElementById('display-flash');
+        const displayMeteringMode = document.getElementById('display-metering-mode');
+        const displayResolution = document.getElementById('display-resolution');
+        
+        // Editable fields
+        const artistInput = document.getElementById('artist');
+        const copyrightInput = document.getElementById('copyright');
+
 
         // Pagination variables
         let allImages = []; // This will store all images fetched from Flask
@@ -375,6 +436,22 @@
             displayLongitudeInput.value = lng.toFixed(6);
         }
 
+        // Function to clear all EXIF display fields
+        function clearExifDisplayFields() {
+            displayMake.value = '';
+            displayModel.value = '';
+            displayDateTimeOriginal.value = '';
+            displayExposureTime.value = '';
+            displayFNumber.value = '';
+            displayISO.value = '';
+            displayFocalLength.value = '';
+            displayFlash.value = '';
+            displayMeteringMode.value = '';
+            displayResolution.value = '';
+            artistInput.value = '';
+            copyrightInput.value = '';
+        }
+
         // Function to select an image from the dropdown when its preview is clicked
         function selectImageAndLoadGPS(filename) {
             filenameSelect.value = filename;
@@ -382,7 +459,7 @@
             showMessageBox(`Selected image: ${filename}`, 'success');
         }
 
-        // Function to update the large image preview AND load/update GPS
+        // Function to update the large image preview AND load/update GPS and other EXIF
         function updateImagePreviewAndGPS() {
             const selectedFilename = filenameSelect.value;
             if (selectedFilename) {
@@ -390,25 +467,50 @@
                 imagePreview.classList.remove('hidden');
                 noImageSelectedText.classList.add('hidden');
 
-                // Fetch GPS data for the selected image
+                // Fetch all EXIF data for the selected image
                 fetch(`/get_exif_gps/${selectedFilename}`)
                     .then(response => response.json())
                     .then(data => {
+                        // Update GPS fields
                         if (data.latitude !== null && data.longitude !== null) {
                             const latLng = L.latLng(data.latitude, data.longitude);
                             placeMarkerAndPanTo(latLng);
                             showMessageBox('GPS data loaded for selected image.', 'success');
                         } else {
-                            // If no GPS data, clear fields and reset map to default
-                            updateCoordinates(map.getCenter().lat, map.getCenter().lng); // Reset to default map center
-                            marker.setLatLng(map.getCenter()); // Move marker to default map center
+                            updateCoordinates(map.getCenter().lat, map.getCenter().lng);
+                            marker.setLatLng(map.getCenter());
                             showMessageBox('No GPS data found for this image. Map reset to default.', 'info');
                         }
+
+                        // Update other EXIF display fields
+                        displayMake.value = data.Make || 'N/A';
+                        displayModel.value = data.Model || 'N/A';
+                        displayDateTimeOriginal.value = data.DateTimeOriginal || 'N/A';
+                        displayExposureTime.value = data.ExposureTime || 'N/A';
+                        displayFNumber.value = data.FNumber || 'N/A';
+                        displayISO.value = data.ISOSpeedRatings || 'N/A';
+                        displayFocalLength.value = data.FocalLength || 'N/A';
+                        displayFlash.value = data.Flash || 'N/A';
+                        displayMeteringMode.value = data.MeteringMode || 'N/A';
+                        
+                        // Combine PixelXDimension and PixelYDimension for Resolution
+                        if (data.PixelXDimension && data.PixelYDimension) {
+                            displayResolution.value = `${data.PixelXDimension} x ${data.PixelYDimension} pixels`;
+                        } else if (data.ImageWidth && data.ImageHeight) {
+                            displayResolution.value = `${data.ImageWidth} x ${data.ImageHeight} pixels (from image dimensions)`;
+                        } else {
+                            displayResolution.value = 'N/A';
+                        }
+
+                        // Update editable Artist and Copyright fields
+                        artistInput.value = data.Artist || '';
+                        copyrightInput.value = data.Copyright || '';
+
                     })
                     .catch(error => {
-                        console.error('Error fetching GPS data:', error);
-                        showMessageBox('Error loading GPS data for image.', 'error');
-                        // Even on error, ensure coordinates are cleared/reset
+                        console.error('Error fetching EXIF data:', error);
+                        showMessageBox('Error loading EXIF data for image.', 'error');
+                        clearExifDisplayFields(); // Clear fields on error
                         updateCoordinates(map.getCenter().lat, map.getCenter().lng);
                         marker.setLatLng(map.getCenter());
                     });
@@ -417,7 +519,7 @@
                 imagePreview.src = '';
                 imagePreview.classList.add('hidden');
                 noImageSelectedText.classList.remove('hidden');
-                // Clear GPS fields if no image is selected
+                clearExifDisplayFields(); // Clear fields if no image is selected
                 updateCoordinates(map.getCenter().lat, map.getCenter().lng);
                 marker.setLatLng(map.getCenter());
             }

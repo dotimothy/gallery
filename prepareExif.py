@@ -58,8 +58,42 @@ def get_gps_ref(decimal_degrees, is_latitude):
 def format_rational(value):
     """Formats a piexif rational tuple (numerator, denominator) into a readable string."""
     if isinstance(value, tuple) and len(value) == 2 and value[1] != 0:
-        return str(value[0] / value[1])
+        return str(round(value[0] / value[1], 3)) # Round to 3 decimal places for display
     return str(value)
+
+def get_flash_mode(value):
+    """Decodes the Flash EXIF tag value into a readable string."""
+    flash_map = {
+        0x0: "No Flash", 0x1: "Flash fired", 0x5: "Flash fired, compulsory flash mode",
+        0x7: "Flash fired, compulsory flash mode, red-eye reduction",
+        0x9: "Flash fired, fill-in mode", 0xD: "Flash fired, fill-in mode, red-eye reduction",
+        0xF: "Flash fired, red-eye reduction", 0x10: "No flash function",
+        0x14: "Flash compulsory off", 0x18: "Flash compulsory off, red-eye reduction",
+        0x20: "No flash, auto mode", 0x30: "Flash not in auto mode",
+        0x41: "Flash fired, auto mode", 0x45: "Flash fired, auto mode, red-eye reduction",
+        0x47: "Flash fired, auto mode, red-eye reduction"
+    }
+    return flash_map.get(value, f"Unknown ({value})")
+
+def get_metering_mode(value):
+    """Decodes the MeteringMode EXIF tag value into a readable string."""
+    metering_map = {
+        0: "Unknown", 1: "Average", 2: "CenterWeightedAverage", 3: "Spot",
+        4: "MultiSpot", 5: "Pattern", 6: "Partial", 255: "Other"
+    }
+    return metering_map.get(value, f"Unknown ({value})")
+
+# Define the directory where images are stored. This directory must be created.
+UPLOAD_FOLDER = 'fulls'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Optional: Set a maximum content length for uploads (though not directly used for this request, good practice)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max upload size
+
+# Ensure the 'fulls' directory exists. If not, create it.
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+    print(f"Created directory: {UPLOAD_FOLDER}")
 
 # --- Flask Routes ---
 
@@ -117,26 +151,17 @@ def index():
                         if piexif.ExifIFD.FocalLength in exif_dict["Exif"]:
                             exif_data["FocalLength"] = format_rational(exif_dict["Exif"][piexif.ExifIFD.FocalLength]) + " mm"
                         if piexif.ExifIFD.Flash in exif_dict["Exif"]:
-                            flash_val = exif_dict["Exif"][piexif.ExifIFD.Flash]
-                            # Decode flash value (simplified for common values)
-                            flash_map = {
-                                0x0: "No Flash", 0x1: "Flash fired", 0x5: "Flash fired, compulsory flash mode",
-                                0x7: "Flash fired, compulsory flash mode, red-eye reduction",
-                                0x9: "Flash fired, fill-in mode", 0xD: "Flash fired, fill-in mode, red-eye reduction",
-                                0xF: "Flash fired, red-eye reduction", 0x10: "No flash function",
-                                0x14: "Flash compulsory off", 0x18: "Flash compulsory off, red-eye reduction",
-                                0x20: "No flash, auto mode", 0x30: "Flash not in auto mode",
-                                0x41: "Flash fired, auto mode", 0x45: "Flash fired, auto mode, red-eye reduction",
-                                0x47: "Flash fired, auto mode, red-eye reduction"
-                            }
-                            exif_data["Flash"] = flash_map.get(flash_val, f"Unknown ({flash_val})")
+                            exif_data["Flash"] = get_flash_mode(exif_dict["Exif"][piexif.ExifIFD.Flash])
                         if piexif.ExifIFD.MeteringMode in exif_dict["Exif"]:
-                            metering_val = exif_dict["Exif"][piexif.ExifIFD.MeteringMode]
-                            metering_map = {
-                                0: "Unknown", 1: "Average", 2: "CenterWeightedAverage", 3: "Spot",
-                                4: "MultiSpot", 5: "Pattern", 6: "Partial", 255: "Other"
-                            }
-                            exif_data["MeteringMode"] = metering_map.get(metering_val, f"Unknown ({metering_val})")
+                            exif_data["MeteringMode"] = get_metering_mode(exif_dict["Exif"][piexif.ExifIFD.MeteringMode])
+                        if piexif.ExifIFD.PixelXDimension in exif_dict["Exif"]:
+                            exif_data["PixelXDimension"] = exif_dict["Exif"][piexif.ExifIFD.PixelXDimension]
+                        if piexif.ExifIFD.PixelYDimension in exif_dict["Exif"]:
+                            exif_data["PixelYDimension"] = exif_dict["Exif"][piexif.ExifIFD.PixelYDimension]
+                        
+                        # Image Dimensions from Pillow (not EXIF but useful for resolution display)
+                        exif_data["ImageWidth"] = img.width
+                        exif_data["ImageHeight"] = img.height
 
 
                         # GPS IFD
@@ -213,6 +238,14 @@ def get_exif_gps(filename):
                 exif_data_for_js["Artist"] = exif_dict["0th"][piexif.ImageIFD.Artist].decode('utf-8')
             if piexif.ImageIFD.Copyright in exif_dict["0th"]:
                 exif_data_for_js["Copyright"] = exif_dict["0th"][piexif.ImageIFD.Copyright].decode('utf-8')
+            if piexif.ExifIFD.PixelXDimension in exif_dict["Exif"]:
+                exif_data_for_js["PixelXDimension"] = exif_dict["Exif"][piexif.ExifIFD.PixelXDimension]
+            if piexif.ExifIFD.PixelYDimension in exif_dict["Exif"]:
+                exif_data_for_js["PixelYDimension"] = exif_dict["Exif"][piexif.ExifIFD.PixelYDimension]
+            
+            # Image Dimensions from Pillow (not EXIF but useful for resolution display)
+            exif_data_for_js["ImageWidth"] = img.width
+            exif_data_for_js["ImageHeight"] = img.height
 
         return jsonify(exif_data_for_js)
     except Exception as e:

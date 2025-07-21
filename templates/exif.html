@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image EXIF Editor</title>
+    <!-- Favicon: Camera emoji -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📸</text></svg>">
+    
     <!-- Link to Tailwind CSS CDN for easy styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Link to Google Fonts for the 'Inter' font -->
@@ -176,7 +179,7 @@
             <div class="form-group">
                 <label for="filename">Select Image:</label>
                 <!-- Dropdown to select which image to modify -->
-                <select name="filename" id="filename" class="focus:ring-indigo-500 focus:border-indigo-500" onchange="updateImagePreview()">
+                <select name="filename" id="filename" class="focus:ring-indigo-500 focus:border-indigo-500" onchange="updateImagePreviewAndGPS()">
                     {% for image in images %}
                         <option value="{{ image.filename }}">{{ image.filename }}</option>
                     {% endfor %}
@@ -239,7 +242,7 @@
                 <!-- Grid layout for image cards, responsive across screen sizes -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {% for image in images %}
-                        <div class="image-card" onclick="selectImage('{{ image.filename }}')">
+                        <div class="image-card" onclick="selectImageAndLoadGPS('{{ image.filename }}')">
                             <!-- Display image thumbnail, linked to the actual image file -->
                             <img src="{{ url_for('serve_image', filename=image.filename) }}" alt="{{ image.filename }}" class="shadow-sm">
                             <div>
@@ -274,6 +277,8 @@
         const imagePreview = document.getElementById('image-preview');
         const noImageSelectedText = document.getElementById('no-image-selected');
         const filenameSelect = document.getElementById('filename');
+        const displayLatitudeInput = document.getElementById('display-latitude');
+        const displayLongitudeInput = document.getElementById('display-longitude');
 
         function showMessageBox(message, type = 'info') {
             messageBox.textContent = message;
@@ -363,35 +368,62 @@
             document.getElementById('longitude').value = lng.toFixed(6);
 
             // Update the display-only input fields
-            document.getElementById('display-latitude').value = lat.toFixed(6);
-            document.getElementById('display-longitude').value = lng.toFixed(6);
+            displayLatitudeInput.value = lat.toFixed(6);
+            displayLongitudeInput.value = lng.toFixed(6);
         }
 
         // Function to select an image from the dropdown when its preview is clicked
-        function selectImage(filename) {
+        function selectImageAndLoadGPS(filename) {
             filenameSelect.value = filename;
-            updateImagePreview(); // Call updateImagePreview to show the newly selected image
+            updateImagePreviewAndGPS(); // Call to update both preview and GPS
             showMessageBox(`Selected image: ${filename}`, 'success');
         }
 
-        // Function to update the large image preview
-        function updateImagePreview() {
+        // Function to update the large image preview AND load/update GPS
+        function updateImagePreviewAndGPS() {
             const selectedFilename = filenameSelect.value;
             if (selectedFilename) {
                 imagePreview.src = `{{ url_for('serve_image', filename='') }}${selectedFilename}`;
                 imagePreview.classList.remove('hidden');
                 noImageSelectedText.classList.add('hidden');
+
+                // Fetch GPS data for the selected image
+                fetch(`/get_exif_gps/${selectedFilename}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.latitude !== null && data.longitude !== null) {
+                            const latLng = L.latLng(data.latitude, data.longitude);
+                            placeMarkerAndPanTo(latLng);
+                            showMessageBox('GPS data loaded for selected image.', 'success');
+                        } else {
+                            // If no GPS data, clear fields and reset map to default
+                            updateCoordinates(map.getCenter().lat, map.getCenter().lng); // Reset to default map center
+                            marker.setLatLng(map.getCenter()); // Move marker to default map center
+                            showMessageBox('No GPS data found for this image. Map reset to default.', 'info');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching GPS data:', error);
+                        showMessageBox('Error loading GPS data for image.', 'error');
+                        // Even on error, ensure coordinates are cleared/reset
+                        updateCoordinates(map.getCenter().lat, map.getCenter().lng);
+                        marker.setLatLng(map.getCenter());
+                    });
+
             } else {
                 imagePreview.src = '';
                 imagePreview.classList.add('hidden');
                 noImageSelectedText.classList.remove('hidden');
+                // Clear GPS fields if no image is selected
+                updateCoordinates(map.getCenter().lat, map.getCenter().lng);
+                marker.setLatLng(map.getCenter());
             }
         }
 
         // Initialize map and image preview when the window loads
         window.onload = () => {
             initMap();
-            updateImagePreview(); // Call on load to show initial selection
+            updateImagePreviewAndGPS(); // Call on load to show initial selection and GPS
         };
     </script>
 </body>

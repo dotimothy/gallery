@@ -6,6 +6,7 @@ import base64
 import io
 import argparse
 import sys # Import sys for sys.exit()
+import signal # Import signal for os.kill()
 
 # Initialize the Flask application
 app = Flask(__name__)
@@ -357,11 +358,11 @@ def shutdown():
     print("Shutdown request received.")
     func = request.environ.get('werkzeug.server.shutdown')
     if func is None:
-        print("Not running with the Werkzeug Server or shutdown function not available. Attempting sys.exit().")
-        # For development, a direct exit might be acceptable if Werkzeug shutdown isn't available.
-        # In a production environment, this would be highly discouraged.
-        sys.exit(0) # Exit the Python process
-        # return 'Server cannot be shut down this way. Please stop it manually.', 500 # This line won't be reached if sys.exit() works
+        print("Not running with the Werkzeug Server or shutdown function not available. Attempting to kill process.")
+        # Get the current process ID and send a SIGINT signal to it
+        # This mimics pressing Ctrl+C in the terminal where the Flask app is running.
+        os.kill(os.getpid(), signal.SIGINT)
+        return 'Server process termination initiated.', 200 # Return a response immediately
     try:
         func()
         print("Werkzeug server shutdown function called.")

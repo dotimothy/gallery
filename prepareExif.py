@@ -1,10 +1,10 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, jsonify
 import piexif
 from PIL import Image
 import base64
 import io
-import argparse # Import the argparse module
+import argparse
 
 # Initialize the Flask application
 app = Flask(__name__)
@@ -121,7 +121,37 @@ def index():
         return f"An unexpected error occurred: {e}", 500
 
     # Render the index.html template, passing the list of images
-    return render_template('exif.html', images=images)
+    return render_template('index.html', images=images)
+
+@app.route('/get_exif_gps/<filename>')
+def get_exif_gps(filename):
+    """
+    New endpoint to retrieve GPS coordinates for a specific image.
+    Returns JSON with latitude and longitude, or null if not found.
+    """
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if not os.path.exists(filepath):
+        return jsonify({"error": "File not found"}), 404
+
+    try:
+        img = Image.open(filepath)
+        if "exif" in img.info:
+            exif_dict = piexif.load(img.info["exif"])
+            if piexif.GPSIFD.GPSLatitude in exif_dict["GPS"] and \
+               piexif.GPSIFD.GPSLongitude in exif_dict["GPS"]:
+                lat_dms = exif_dict["GPS"][piexif.GPSIFD.GPSLatitude]
+                lon_dms = exif_dict["GPS"][piexif.GPSIFD.GPSLongitude]
+                lat_ref = exif_dict["GPS"][piexif.GPSIFD.GPSLatitudeRef].decode('utf-8')
+                lon_ref = exif_dict["GPS"][piexif.GPSIFD.GPSLongitudeRef].decode('utf-8')
+
+                latitude = dms_to_decimal(lat_dms, lat_ref)
+                longitude = dms_to_decimal(lon_dms, lon_ref)
+                return jsonify({"latitude": latitude, "longitude": longitude})
+        return jsonify({"latitude": None, "longitude": None}) # No GPS data found
+    except Exception as e:
+        print(f"Error getting EXIF GPS for {filename}: {e}")
+        return jsonify({"error": f"Could not read EXIF GPS: {e}"}), 500
+
 
 @app.route('/modify_exif', methods=['POST'])
 def modify_exif():
@@ -218,7 +248,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Flask EXIF Editor Application.')
     parser.add_argument('--fulls', type=str, default='fulls',
                         help='Path to the directory containing images (default: fulls)')
-    parser.add_argument('--port', type=int, default=8000,
+    parser.add_argument('--port', type=int, default=5000,
                         help='Port to host the application (default: 5000)')
     parser.add_argument('--host', type=str, default='127.0.0.1',
                         help='Host IP interface to host the application (default: 127.0.0.1)')

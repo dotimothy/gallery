@@ -278,6 +278,9 @@
             <!-- Submit button for the form -->
             <button type="submit" class="btn btn-primary w-full shadow-md hover:shadow-lg">Modify EXIF Data</button>
 
+            <!-- Finished button to shut down the app -->
+            <button type="button" id="finished-button" class="btn bg-red-600 hover:bg-red-700 text-white w-full shadow-md hover:shadow-lg mt-4">Finished (Shut Down App)</button>
+
             <!-- Image Preview Container - Moved to after modify button -->
             <div id="image-preview-container">
                 <img id="image-preview" src="" alt="Selected Image Preview" class="hidden">
@@ -337,6 +340,9 @@
         // Editable fields
         const artistInput = document.getElementById('artist');
         const copyrightInput = document.getElementById('copyright');
+
+        // Finished button
+        const finishedButton = document.getElementById('finished-button');
 
 
         // Pagination variables
@@ -587,6 +593,31 @@
             document.getElementById('next-page').disabled = currentPage === totalPages || allImages.length === 0 || totalPages === 0;
         }
 
+        // Function to send shutdown request to Flask app
+        function sendShutdownRequest() {
+            fetch('/shutdown', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                // You might send a small payload if needed, but for shutdown, it's often empty
+                body: JSON.stringify({}) 
+            })
+            .then(response => {
+                if (response.ok) {
+                    console.log('Shutdown request sent successfully.');
+                    showMessageBox('Application is shutting down...', 'info');
+                } else {
+                    console.error('Failed to send shutdown request.');
+                    showMessageBox('Failed to shut down application.', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error sending shutdown request:', error);
+                showMessageBox('Error sending shutdown request.', 'error');
+            });
+        }
+
         // Initialize map and image preview when the window loads
         window.onload = () => {
             initMap();
@@ -596,6 +627,9 @@
             }
             displayImages(currentPage); // Display the first page of images
             updateImagePreviewAndGPS(); // Update preview for initially selected image
+
+            // Attach event listener to the Finished button
+            finishedButton.addEventListener('click', sendShutdownRequest);
         };
 
         // Pagination button event listeners
@@ -611,6 +645,18 @@
                     displayImages(currentPage + 1);
                 }
             });
+        });
+
+        // Attach event listener for window closing/refreshing
+        // Note: Browsers often prevent custom messages or synchronous requests on beforeunload for security/UX.
+        // The fetch request here is asynchronous, so its success is not guaranteed before the tab closes.
+        // It's primarily for best-effort shutdown.
+        window.addEventListener('beforeunload', (event) => {
+            // This is a best-effort attempt. The browser might kill the process before the request completes.
+            sendShutdownRequest();
+            // To prompt the user before closing (optional, often annoying):
+            // event.preventDefault();
+            // event.returnValue = ''; // Required for some older browsers to show prompt
         });
     </script>
 </body>

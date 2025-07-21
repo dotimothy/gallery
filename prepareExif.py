@@ -247,6 +247,11 @@ def get_exif_gps(filename):
             exif_data_for_js["ImageWidth"] = img.width
             exif_data_for_js["ImageHeight"] = img.height
 
+            if piexif.ExifIFD.Flash in exif_dict["Exif"]:
+                exif_data_for_js["Flash"] = get_flash_mode(exif_dict["Exif"][piexif.ExifIFD.Flash])
+            if piexif.ExifIFD.MeteringMode in exif_dict["Exif"]:
+                exif_data_for_js["MeteringMode"] = get_metering_mode(exif_dict["Exif"][piexif.ExifIFD.MeteringMode])
+
         return jsonify(exif_data_for_js)
     except Exception as e:
         print(f"Error getting EXIF GPS for {filename}: {e}")
@@ -341,6 +346,18 @@ def serve_image(filename):
     This allows the browser to display the images.
     """
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    """
+    Shuts down the Flask application.
+    This endpoint is called by the 'Finished' button and on window.beforeunload.
+    """
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        raise RuntimeError('Not running with the Werkzeug Server')
+    func()
+    return 'Server shutting down...'
 
 # --- Main execution block ---
 if __name__ == '__main__':

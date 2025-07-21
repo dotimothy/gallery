@@ -182,7 +182,7 @@
         <div id="message-box" role="alert"></div>
 
         <!-- Form to submit EXIF modification requests -->
-        <form action="{{ url_for('modify_exif') }}" method="POST" class="space-y-6">
+        <form action="{{ url_for('modify_exif') }}" method="POST" class="space-y-6" id="exif-modify-form">
             <div class="form-group">
                 <label for="filename">Select Image:</label>
                 <!-- Dropdown to select which image to modify -->
@@ -345,6 +345,12 @@
         // Buttons
         const finishedButton = document.getElementById('finished-button');
         const getCurrentLocationButton = document.getElementById('get-current-location-button');
+
+        // Get the form element
+        const exifModifyForm = document.getElementById('exif-modify-form');
+
+        // Flag to indicate if an internal form submission is happening
+        let isInternalNavigation = false;
 
 
         // Pagination variables
@@ -673,6 +679,11 @@
             finishedButton.addEventListener('click', sendShutdownRequest);
             // Attach event listener to the Get Current Location button
             getCurrentLocationButton.addEventListener('click', getCurrentLocation);
+
+            // Set the flag when the form is submitted
+            exifModifyForm.addEventListener('submit', () => {
+                isInternalNavigation = true;
+            });
         };
 
         // Pagination button event listeners
@@ -691,20 +702,19 @@
         });
 
         // Attach event listener for window closing/refreshing
-        let shutdownSentOnUnload = false; // Flag to prevent multiple calls
+        // Only send shutdown beacon if not an internal navigation
         window.addEventListener('beforeunload', (event) => {
-            if (!shutdownSentOnUnload) {
+            if (!isInternalNavigation) {
                 // Use navigator.sendBeacon for a more reliable, non-blocking request on unload
-                // It's designed for analytics/logging and is sent even if the page is closing.
                 const data = JSON.stringify({});
                 navigator.sendBeacon('/shutdown', new Blob([data], { type: 'application/json' }));
                 console.log('Shutdown beacon sent on beforeunload.');
-                shutdownSentOnUnload = true; // Mark as sent
+            } else {
+                console.log('Internal navigation detected, skipping shutdown beacon on beforeunload.');
+                // Reset the flag immediately after it's checked for internal navigation.
+                // This ensures that if the user then closes the newly loaded page, the shutdown works.
+                isInternalNavigation = false; 
             }
-            // No need to prevent default or set returnValue for a silent beacon.
-            // If you want to prompt the user, you'd uncomment these:
-            // event.preventDefault();
-            // event.returnValue = '';
         });
     </script>
 </body>

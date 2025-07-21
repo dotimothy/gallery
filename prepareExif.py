@@ -55,6 +55,12 @@ def get_gps_ref(decimal_degrees, is_latitude):
     else:
         return 'E' if decimal_degrees >= 0 else 'W'
 
+def format_rational(value):
+    """Formats a piexif rational tuple (numerator, denominator) into a readable string."""
+    if isinstance(value, tuple) and len(value) == 2 and value[1] != 0:
+        return str(value[0] / value[1])
+    return str(value)
+
 # --- Flask Routes ---
 
 @app.route('/')
@@ -80,7 +86,8 @@ def index():
                         # Load EXIF data using piexif
                         exif_dict = piexif.load(img.info["exif"])
 
-                        # Extract and decode some common EXIF tags from the 0th IFD (Image File Directory)
+                        # --- Extract and decode common EXIF tags ---
+                        # 0th IFD (Image File Directory)
                         if piexif.ImageIFD.Make in exif_dict["0th"]:
                             exif_data["Make"] = exif_dict["0th"][piexif.ImageIFD.Make].decode('utf-8')
                         if piexif.ImageIFD.Model in exif_dict["0th"]:
@@ -91,8 +98,48 @@ def index():
                             exif_data["Artist"] = exif_dict["0th"][piexif.ImageIFD.Artist].decode('utf-8')
                         if piexif.ImageIFD.Copyright in exif_dict["0th"]:
                             exif_data["Copyright"] = exif_dict["0th"][piexif.ImageIFD.Copyright].decode('utf-8')
+                        if piexif.ImageIFD.XResolution in exif_dict["0th"]:
+                            exif_data["XResolution"] = format_rational(exif_dict["0th"][piexif.ImageIFD.XResolution])
+                        if piexif.ImageIFD.YResolution in exif_dict["0th"]:
+                            exif_data["YResolution"] = format_rational(exif_dict["0th"][piexif.ImageIFD.YResolution])
 
-                        # Extract and convert GPS data from the GPS IFD
+                        # Exif IFD
+                        if piexif.ExifIFD.DateTimeOriginal in exif_dict["Exif"]:
+                            exif_data["DateTimeOriginal"] = exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal].decode('utf-8')
+                        if piexif.ExifIFD.DateTimeDigitized in exif_dict["Exif"]:
+                            exif_data["DateTimeDigitized"] = exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized].decode('utf-8')
+                        if piexif.ExifIFD.ExposureTime in exif_dict["Exif"]:
+                            exif_data["ExposureTime"] = format_rational(exif_dict["Exif"][piexif.ExifIFD.ExposureTime]) + " s"
+                        if piexif.ExifIFD.FNumber in exif_dict["Exif"]:
+                            exif_data["FNumber"] = "f/" + format_rational(exif_dict["Exif"][piexif.ExifIFD.FNumber])
+                        if piexif.ExifIFD.ISOSpeedRatings in exif_dict["Exif"]:
+                            exif_data["ISOSpeedRatings"] = exif_dict["Exif"][piexif.ExifIFD.ISOSpeedRatings]
+                        if piexif.ExifIFD.FocalLength in exif_dict["Exif"]:
+                            exif_data["FocalLength"] = format_rational(exif_dict["Exif"][piexif.ExifIFD.FocalLength]) + " mm"
+                        if piexif.ExifIFD.Flash in exif_dict["Exif"]:
+                            flash_val = exif_dict["Exif"][piexif.ExifIFD.Flash]
+                            # Decode flash value (simplified for common values)
+                            flash_map = {
+                                0x0: "No Flash", 0x1: "Flash fired", 0x5: "Flash fired, compulsory flash mode",
+                                0x7: "Flash fired, compulsory flash mode, red-eye reduction",
+                                0x9: "Flash fired, fill-in mode", 0xD: "Flash fired, fill-in mode, red-eye reduction",
+                                0xF: "Flash fired, red-eye reduction", 0x10: "No flash function",
+                                0x14: "Flash compulsory off", 0x18: "Flash compulsory off, red-eye reduction",
+                                0x20: "No flash, auto mode", 0x30: "Flash not in auto mode",
+                                0x41: "Flash fired, auto mode", 0x45: "Flash fired, auto mode, red-eye reduction",
+                                0x47: "Flash fired, auto mode, red-eye reduction"
+                            }
+                            exif_data["Flash"] = flash_map.get(flash_val, f"Unknown ({flash_val})")
+                        if piexif.ExifIFD.MeteringMode in exif_dict["Exif"]:
+                            metering_val = exif_dict["Exif"][piexif.ExifIFD.MeteringMode]
+                            metering_map = {
+                                0: "Unknown", 1: "Average", 2: "CenterWeightedAverage", 3: "Spot",
+                                4: "MultiSpot", 5: "Pattern", 6: "Partial", 255: "Other"
+                            }
+                            exif_data["MeteringMode"] = metering_map.get(metering_val, f"Unknown ({metering_val})")
+
+
+                        # GPS IFD
                         if piexif.GPSIFD.GPSLatitude in exif_dict["GPS"] and \
                            piexif.GPSIFD.GPSLongitude in exif_dict["GPS"]:
                             lat_dms = exif_dict["GPS"][piexif.GPSIFD.GPSLatitude]
@@ -100,54 +147,74 @@ def index():
                             lat_ref = exif_dict["GPS"][piexif.GPSIFD.GPSLatitudeRef].decode('utf-8')
                             lon_ref = exif_dict["GPS"][piexif.GPSIFD.GPSLongitudeRef].decode('utf-8')
 
-                            # Convert DMS back to decimal degrees for display using custom function
                             latitude = dms_to_decimal(lat_dms, lat_ref)
                             longitude = dms_to_decimal(lon_dms, lon_ref)
                             exif_data["GPSLatitude"] = f"{latitude:.6f}" # Format to 6 decimal places
                             exif_data["GPSLongitude"] = f"{longitude:.6f}"
 
                 except Exception as e:
-                    # Log any errors encountered while reading EXIF data for a specific file
                     print(f"Error reading EXIF for {filename}: {e}")
                     exif_data["Error"] = f"Could not read EXIF: {e}"
 
-                # Add the image filename and its extracted EXIF data to the list
                 images.append({'filename': filename, 'exif': exif_data})
     except FileNotFoundError:
-        # Handle the case where the 'fulls' directory does not exist
         return f"The '{app.config['UPLOAD_FOLDER']}' directory was not found. Please create it and place images inside, or specify a valid path using --fulls.", 500
     except Exception as e:
-        # Catch any other unexpected errors during directory listing
         return f"An unexpected error occurred: {e}", 500
 
-    # Render the exif.html template, passing the list of images
     return render_template('exif.html', images=images)
 
 @app.route('/get_exif_gps/<filename>')
 def get_exif_gps(filename):
     """
-    New endpoint to retrieve GPS coordinates for a specific image.
-    Returns JSON with latitude and longitude, or null if not found.
+    New endpoint to retrieve GPS coordinates and other relevant EXIF data for a specific image.
+    Returns JSON with latitude, longitude, and other EXIF fields, or null if not found.
     """
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     if not os.path.exists(filepath):
         return jsonify({"error": "File not found"}), 404
 
+    exif_data_for_js = {"latitude": None, "longitude": None}
     try:
         img = Image.open(filepath)
         if "exif" in img.info:
             exif_dict = piexif.load(img.info["exif"])
+
+            # GPS Data
             if piexif.GPSIFD.GPSLatitude in exif_dict["GPS"] and \
                piexif.GPSIFD.GPSLongitude in exif_dict["GPS"]:
                 lat_dms = exif_dict["GPS"][piexif.GPSIFD.GPSLatitude]
                 lon_dms = exif_dict["GPS"][piexif.GPSIFD.GPSLongitude]
                 lat_ref = exif_dict["GPS"][piexif.GPSIFD.GPSLatitudeRef].decode('utf-8')
                 lon_ref = exif_dict["GPS"][piexif.GPSIFD.GPSLongitudeRef].decode('utf-8')
+                exif_data_for_js["latitude"] = dms_to_decimal(lat_dms, lat_ref)
+                exif_data_for_js["longitude"] = dms_to_decimal(lon_dms, lon_ref)
+            
+            # Add other EXIF data to the JSON response for potential future use in JS
+            if piexif.ImageIFD.Make in exif_dict["0th"]:
+                exif_data_for_js["Make"] = exif_dict["0th"][piexif.ImageIFD.Make].decode('utf-8')
+            if piexif.ImageIFD.Model in exif_dict["0th"]:
+                exif_data_for_js["Model"] = exif_dict["0th"][piexif.ImageIFD.Model].decode('utf-8')
+            if piexif.ExifIFD.DateTimeOriginal in exif_dict["Exif"]:
+                exif_data_for_js["DateTimeOriginal"] = exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal].decode('utf-8')
+            if piexif.ExifIFD.ExposureTime in exif_dict["Exif"]:
+                exif_data_for_js["ExposureTime"] = format_rational(exif_dict["Exif"][piexif.ExifIFD.ExposureTime]) + " s"
+            if piexif.ExifIFD.FNumber in exif_dict["Exif"]:
+                exif_data_for_js["FNumber"] = "f/" + format_rational(exif_dict["Exif"][piexif.ExifIFD.FNumber])
+            if piexif.ExifIFD.ISOSpeedRatings in exif_dict["Exif"]:
+                exif_data_for_js["ISOSpeedRatings"] = exif_dict["Exif"][piexif.ExifIFD.ISOSpeedRatings]
+            if piexif.ExifIFD.FocalLength in exif_dict["Exif"]:
+                exif_data_for_js["FocalLength"] = format_rational(exif_dict["Exif"][piexif.ExifIFD.FocalLength]) + " mm"
+            if piexif.ImageIFD.XResolution in exif_dict["0th"]:
+                exif_data_for_js["XResolution"] = format_rational(exif_dict["0th"][piexif.ImageIFD.XResolution])
+            if piexif.ImageIFD.YResolution in exif_dict["0th"]:
+                exif_data_for_js["YResolution"] = format_rational(exif_dict["0th"][piexif.ImageIFD.YResolution])
+            if piexif.ImageIFD.Artist in exif_dict["0th"]:
+                exif_data_for_js["Artist"] = exif_dict["0th"][piexif.ImageIFD.Artist].decode('utf-8')
+            if piexif.ImageIFD.Copyright in exif_dict["0th"]:
+                exif_data_for_js["Copyright"] = exif_dict["0th"][piexif.ImageIFD.Copyright].decode('utf-8')
 
-                latitude = dms_to_decimal(lat_dms, lat_ref)
-                longitude = dms_to_decimal(lon_dms, lon_ref)
-                return jsonify({"latitude": latitude, "longitude": longitude})
-        return jsonify({"latitude": None, "longitude": None}) # No GPS data found
+        return jsonify(exif_data_for_js)
     except Exception as e:
         print(f"Error getting EXIF GPS for {filename}: {e}")
         return jsonify({"error": f"Could not read EXIF GPS: {e}"}), 500

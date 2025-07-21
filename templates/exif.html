@@ -159,10 +159,12 @@
         #image-preview {
             max-width: 100%;
             height: auto;
-            max-height: 300px; /* Limit height for larger images */
+            max-height: 450px; /* Increased max-height for bigger preview */
             border-radius: 0.5rem;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
             object-fit: contain; /* Ensure the whole image is visible */
+            margin: 0 auto; /* Center the image within its container */
+            display: block; /* Make it a block element to respect margin:auto */
         }
     </style>
 </head>
@@ -184,12 +186,6 @@
                         <option value="{{ image.filename }}">{{ image.filename }}</option>
                     {% endfor %}
                 </select>
-            </div>
-
-            <!-- Image Preview Container -->
-            <div id="image-preview-container">
-                <img id="image-preview" src="" alt="Selected Image Preview" class="hidden">
-                <p id="no-image-selected" class="text-gray-400">No image selected for preview.</p>
             </div>
 
             <!-- GPS Coordinates section with map -->
@@ -216,6 +212,12 @@
                         <input type="text" id="display-longitude" class="bg-gray-100 cursor-not-allowed" readonly>
                     </div>
                 </div>
+            </div>
+
+            <!-- Image Preview Container - Moved to after GPS section -->
+            <div id="image-preview-container">
+                <img id="image-preview" src="" alt="Selected Image Preview" class="hidden">
+                <p id="no-image-selected" class="text-gray-400">No image selected for preview.</p>
             </div>
 
             <!-- Grid layout for artist and copyright inputs -->

@@ -248,8 +248,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Flask EXIF Editor Application.')
     parser.add_argument('--fulls', type=str, default='fulls',
                         help='Path to the directory containing images (default: fulls)')
-    parser.add_argument('--port', type=int, default=5000,
-                        help='Port to host the application (default: 5000)')
+    parser.add_argument('--port', type=int, default=8000,
+                        help='Port to host the application (default: 8000)')
     parser.add_argument('--host', type=str, default='127.0.0.1',
                         help='Host IP interface to host the application (default: 127.0.0.1)')
     

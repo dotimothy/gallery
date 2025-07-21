@@ -166,6 +166,11 @@
             margin: 0 auto; /* Center the image within its container */
             display: block; /* Make it a block element to respect margin:auto */
         }
+        /* Pagination controls styling */
+        #pagination-controls button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body class="p-4">
@@ -214,12 +219,6 @@
                 </div>
             </div>
 
-            <!-- Image Preview Container - Moved to after GPS section -->
-            <div id="image-preview-container">
-                <img id="image-preview" src="" alt="Selected Image Preview" class="hidden">
-                <p id="no-image-selected" class="text-gray-400">No image selected for preview.</p>
-            </div>
-
             <!-- Grid layout for artist and copyright inputs -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="form-group">
@@ -234,6 +233,12 @@
 
             <!-- Submit button for the form -->
             <button type="submit" class="btn btn-primary w-full shadow-md hover:shadow-lg">Modify EXIF Data</button>
+
+            <!-- Image Preview Container - Moved to after GPS section -->
+            <div id="image-preview-container">
+                <img id="image-preview" src="" alt="Selected Image Preview" class="hidden">
+                <p id="no-image-selected" class="text-gray-400">No image selected for preview.</p>
+            </div>
         </form>
 
         <hr class="my-8 border-gray-700"> <!-- Horizontal rule for separation -->
@@ -241,30 +246,21 @@
         <div class="mb-8">
             <h2 class="text-2xl font-semibold mb-4 text-gray-200">Images in 'fulls' directory:</h2>
             {% if images %}
+                <!-- This script tag is crucial for passing Flask data to JavaScript -->
+                <script>
+                    const allImagesData = {{ images | tojson }};
+                </script>
                 <!-- Grid layout for image cards, responsive across screen sizes -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {% for image in images %}
-                        <div class="image-card" onclick="selectImageAndLoadGPS('{{ image.filename }}')">
-                            <!-- Display image thumbnail, linked to the actual image file -->
-                            <img src="{{ url_for('serve_image', filename=image.filename) }}" alt="{{ image.filename }}" class="shadow-sm">
-                            <div>
-                                <h3 class="text-lg font-medium text-gray-100">{{ image.filename }}</h3>
-                                <div class="exif-data mt-2">
-                                    {% if image.exif %}
-                                        <!-- Loop through and display extracted EXIF data -->
-                                        {% for key, value in image.exif.items() %}
-                                            <p><strong class="font-medium">{{ key }}:</strong> {{ value }}</p>
-                                        {% endfor %}
-                                    {% else %}
-                                        <p class="text-gray-400">No EXIF data found.</p>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    {% endfor %}
+                <div id="image-list-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Images will be dynamically inserted here by JavaScript -->
+                </div>
+                <div id="pagination-controls" class="flex justify-center items-center space-x-4 mt-6">
+                    <button id="prev-page" class="btn btn-primary">&lt; Previous</button>
+                    <span id="page-info" class="text-gray-300">Page 1 of X</span>
+                    <button id="next-page" class="btn btn-primary">Next &gt;</button>
                 </div>
             {% else %}
-                <p class="text-gray-400">No images found in the 'fulls' directory. Please add some .jpg or .png files.</p>
+                <p id="no-images-overall" class="text-gray-400">No images found in the 'fulls' directory. Please add some .jpg or .png files.</p>
             {% endif %}
         </div>
     </div>
@@ -281,6 +277,11 @@
         const filenameSelect = document.getElementById('filename');
         const displayLatitudeInput = document.getElementById('display-latitude');
         const displayLongitudeInput = document.getElementById('display-longitude');
+
+        // Pagination variables
+        let allImages = []; // This will store all images fetched from Flask
+        const imagesPerPage = 9;
+        let currentPage = 1;
 
         function showMessageBox(message, type = 'info') {
             messageBox.textContent = message;
@@ -422,11 +423,82 @@
             }
         }
 
+        // Pagination functions
+        function displayImages(page) {
+            const imageListContainer = document.getElementById('image-list-container');
+            imageListContainer.innerHTML = ''; // Clear current images
+
+            const totalPages = Math.ceil(allImages.length / imagesPerPage);
+            currentPage = Math.max(1, Math.min(page, totalPages)); // Clamp current page
+
+            const startIndex = (currentPage - 1) * imagesPerPage;
+            const endIndex = Math.min(startIndex + imagesPerPage, allImages.length);
+
+            const imagesToDisplay = allImages.slice(startIndex, endIndex);
+
+            if (imagesToDisplay.length === 0 && allImages.length > 0 && currentPage > 1) {
+                // If we landed on an empty page (e.g., last page with 0 items after deletion), go back one
+                currentPage = Math.max(1, currentPage - 1);
+                displayImages(currentPage);
+                return;
+            }
+            
+            imagesToDisplay.forEach(image => {
+                const imageCard = document.createElement('div');
+                imageCard.className = 'image-card';
+                imageCard.onclick = () => selectImageAndLoadGPS(image.filename);
+
+                let exifHtml = '<p class="text-gray-400">No EXIF data found.</p>';
+                if (image.exif && Object.keys(image.exif).length > 0) {
+                    exifHtml = '';
+                    for (const key in image.exif) {
+                        exifHtml += `<p><strong class="font-medium">${key}:</strong> ${image.exif[key]}</p>`;
+                    }
+                }
+
+                imageCard.innerHTML = `
+                    <img src="{{ url_for('serve_image', filename='') }}${image.filename}" alt="${image.filename}" class="shadow-sm">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-100">${image.filename}</h3>
+                        <div class="exif-data mt-2">
+                            ${exifHtml}
+                        </div>
+                    </div>
+                `;
+                imageListContainer.appendChild(imageCard);
+            });
+
+            // Update pagination controls
+            document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages || 1}`;
+            document.getElementById('prev-page').disabled = currentPage === 1;
+            document.getElementById('next-page').disabled = currentPage === totalPages || allImages.length === 0 || totalPages === 0;
+        }
+
         // Initialize map and image preview when the window loads
         window.onload = () => {
             initMap();
-            updateImagePreviewAndGPS(); // Call on load to show initial selection and GPS
+            // Populate allImages from the Jinja2 context
+            if (typeof allImagesData !== 'undefined') {
+                allImages = allImagesData;
+            }
+            displayImages(currentPage); // Display the first page of images
+            updateImagePreviewAndGPS(); // Update preview for initially selected image
         };
+
+        // Pagination button event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('prev-page').addEventListener('click', () => {
+                if (currentPage > 1) {
+                    displayImages(currentPage - 1);
+                }
+            });
+            document.getElementById('next-page').addEventListener('click', () => {
+                const totalPages = Math.ceil(allImages.length / imagesPerPage);
+                if (currentPage < totalPages) {
+                    displayImages(currentPage + 1);
+                }
+            });
+        });
     </script>
 </body>
 </html>

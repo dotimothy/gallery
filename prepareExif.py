@@ -326,7 +326,7 @@ def modify_exif():
             exif_dict["0th"][piexif.ImageIFD.Copyright] = copyright_info.encode('utf-8')
         
         # Add a custom software tag to indicate this app modified the EXIF
-        exif_dict["0th"][piexif.ImageIFD.Software] = b"Flask EXIF Editor by Gemini"
+        exif_dict["0th"][piexif.ImageIFD.Software] = b"Flask EXIF Editor"
 
         # Dump the EXIF dictionary into bytes format suitable for saving
         exif_bytes = piexif.dump(exif_dict)

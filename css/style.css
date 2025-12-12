@@ -1,0 +1,444 @@
+/* Global & Reset */
+body {
+    background-color: black;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    /* App handles scrolling */
+    font-family: 'Roboto', sans-serif;
+    color: white;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+p {
+    margin: 0;
+    font-weight: 300;
+}
+
+a {
+    color: #007bff;
+    text-decoration: none;
+    transition: opacity 0.2s;
+}
+
+a:hover {
+    opacity: 0.7;
+}
+
+button {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: white;
+    outline: none;
+}
+
+/* UI Layer */
+#ui-layer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    /* Let clicks pass through to canvas/grid */
+    z-index: 10;
+}
+
+#ui-layer button,
+#ui-layer a,
+#ui-layer h1 {
+    pointer-events: auto;
+    /* Re-enable clicks for controls */
+}
+
+/* Title */
+#title {
+    position: absolute;
+    top: 20px;
+    width: 100%;
+    text-align: center;
+    font-size: 2em;
+    /* Adjusted roughly from 3em to fit better */
+    font-weight: 900;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+    opacity: 0.9;
+    transition: opacity 0.5s;
+}
+
+#title.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Mode Toggle */
+#mode-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    font-size: 1.5em;
+    /* Smaller than legacy huge buttons */
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 5px 15px;
+    border-radius: 20px;
+    background: rgba(0, 0, 0, 0.5);
+    transition: all 0.3s ease;
+    z-index: 20;
+}
+
+#mode-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: white;
+}
+
+/* Layout Containers */
+#gallery-3d {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    opacity: 1;
+    opacity: 1;
+    transition: opacity 0.5s ease-in-out;
+    cursor: grab;
+}
+
+#gallery-3d:active {
+    cursor: grabbing;
+}
+
+#gallery-3d.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#gallery-2d {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+    overflow-y: auto;
+    /* Scrollable grid */
+    padding-top: 100px;
+    /* Space for title */
+    box-sizing: border-box;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease-in-out;
+    background: black;
+    /* Solid background for 2d mode */
+}
+
+#gallery-2d.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* 2D Thumbs */
+.thumb {
+    display: inline-block;
+    width: calc(100%/5 - 20px);
+    /* Gap */
+    margin: 10px;
+    aspect-ratio: 3/2;
+    position: relative;
+    cursor: pointer;
+    box-sizing: border-box;
+    padding: 0;
+    vertical-align: top;
+
+    /* Hardware Accel */
+    transform: translate3d(0, 0, 0);
+    will-change: transform, opacity;
+    transition: transform 0.2s ease-out, filter 0.2s;
+}
+
+.thumb.active img {
+    box-shadow: 0 0 25px #007bff;
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+.thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+    opacity: 0.8;
+    transition: opacity 0.2s, box-shadow 0.2s;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+    /* Natural Shadow */
+}
+
+.thumb:hover {
+    transform: scale(1.02);
+    z-index: 2;
+}
+
+.thumb:hover img {
+    opacity: 1;
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* Response Grid */
+@media (max-width: 1280px) {
+    .thumb {
+        width: calc(100%/4 - 20px);
+    }
+}
+
+@media (max-width: 1024px) {
+    .thumb {
+        width: calc(100%/3 - 20px);
+    }
+}
+
+@media (max-width: 767px) {
+    .thumb {
+        width: calc(100%/2 - 20px);
+    }
+}
+
+/* 2D Fullscreen Overlay (#imageViewer legacy refactor) */
+#imageViewer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 50;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    /* Animation */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+#imageViewer.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#full-image-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#full-image-container img {
+    max-width: 95%;
+    max-height: 95%;
+    object-fit: contain;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+    transform: translate3d(0, 0, 0);
+    /* Hardware accel */
+}
+
+/* Loader */
+.loader {
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    border-top: 3px solid #fff;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin-top: -15px;
+    margin-left: -15px;
+    z-index: 1;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Metadata Overlay (Shared) */
+#metadataViewer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: linear-gradient(to top, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0));
+    padding: 20px;
+    padding-bottom: 40px;
+    box-sizing: border-box;
+    pointer-events: none;
+    transition: opacity 0.3s, transform 0.3s;
+    z-index: 60;
+    text-align: left;
+    transform: translateY(100%);
+    /* Hidden by default */
+}
+
+#metadataViewer.visible {
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+#metadataViewer h2 {
+    font-size: 1.5em;
+    margin-bottom: 5px;
+}
+
+#metadataViewer p {
+    font-size: 1em;
+    opacity: 0.8;
+    line-height: 1.4;
+}
+
+#toggleMetadata {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    font-size: 2em;
+    z-index: 61;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+
+#toggleMetadata:hover {
+    opacity: 1;
+}
+
+/* Light Pollution Map Overlay */
+#lightPollutionMapOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s;
+}
+
+#lightPollutionMapOverlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+#lightPollutionMapContainer {
+    width: 90%;
+    max-width: 1000px;
+    height: 80%;
+    position: relative;
+    background: black;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#lightPollutionMapIframe {
+    width: 100%;
+    height: 100%;
+}
+
+#lightPollutionMapCloseButton {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 1.5em;
+    z-index: 2;
+}
+
+/* Nav Arrows */
+.nav-arrow {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 4em;
+    opacity: 0.3;
+    transition: opacity 0.2s;
+    z-index: 30;
+}
+
+.nav-arrow:hover {
+    opacity: 0.8;
+}
+
+#leftArrow {
+    left: 20px;
+}
+
+#rightArrow {
+    right: 20px;
+}
+
+/* Footer */
+/* Footer */
+footer {
+    position: fixed;
+    bottom: 20px;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    z-index: 15;
+    pointer-events: none;
+}
+
+footer h2 {
+    font-size: 0.9em;
+    opacity: 0.5;
+    pointer-events: auto;
+    display: inline-block;
+}
+
+#home {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    font-size: 2em;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+    z-index: 25;
+}
+
+#home:hover {
+    opacity: 1;
+}
+
+/* Controls UI (Close, Fullscreen) */
+#exitViewer,
+#fullscreenToggle {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-size: 2.5em;
+    z-index: 55;
+    opacity: 0.6;
+}
+
+#fullscreenToggle {
+    right: 70px;
+}
+
+#exitViewer:hover,
+#fullscreenToggle:hover {
+    opacity: 1;
+}

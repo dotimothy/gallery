@@ -18,26 +18,50 @@ A Web App to display your images along with essential metadata just by putting i
 
 ---
 
+## Features 🌟
+
+### 3D Immersive Mode 🌍
+Experience your gallery like never before with the new **3D Sphere View**:
+- **Dynamic Layout**: Images are arranged in a Fibonacci Sphere that automatically scales based on your gallery size.
+- **Interactive Controls**: 
+  - **Rotate**: Drag anywhere to spin the gallery.
+  - **Zoom**: Scroll or Pinch to fly in and out.
+  - **Focus**: Click any image to smoothly transition into a focused "Line View" for detailed inspection.
+
+### Classic 2D Grid ▦
+Switch instantly to the traditional **2D Grid View** for a clean, scannable overview of your work.
+
+---
+
 ## Operations
 
 Here's how to operate the gallery:
 
-1.  **Navigating the Gallery:**
-    * Click on a thumbnail to open the image viewer.
-    * Click the "🏠" button (bottom right) to return to the main gallery. (Hidden in iframes).
+### General
+*   **Switch Modes**: Click the **3D / 2D** toggle button (top right) to swap between the immersive sphere and the classic grid.
 
-2.  **Using the Image Viewer:**
-    * **Zoom & Pan:** Use mouse scroll/two-finger pinch to zoom. Drag with mouse/one-finger to pan when zoomed. Double-click to reset zoom/pan.
-    * **Fullscreen Mode:** Click "⛶" (top left) to toggle fullscreen for the viewer.
-    * **Navigation:** Click "❮" / "❯" arrows (desktop) or swipe left/right (mobile, when not zoomed) to change images. Use the bottom thumbnail selector to jump to specific images.
-    * **Viewing Metadata:** Click "ℹ️" (top left) to show/hide image details.
+### Navigating the Gallery
+*   **3D Mode**: Drag to rotate, Scroll to zoom. Click an image to enter viewing mode.
+*   **2D Mode**: Scroll vertically. Click a thumbnail to open the fullscreen viewer.
 
-3.  **Keyboard Shortcuts (when viewer is open):**
-    * `←` / `→`: Navigate previous/next image.
-    * `Esc`: Reset zoom/pan, or exit viewer if at default zoom.
-    * `I`: Toggle metadata.
-    * `F`: Toggle fullscreen.
-    * `T`: Collapse thumbnail picker during viewing an image.
+### Top Controls
+*   **⛶**: Toggle Fullscreen for the entire experience.
+*   **3D/2D**: Switch layout modes.
+
+### Fullscreen Viewer
+When an image is selected:
+*   **Zoom & Pan**: Mouse scroll or pinch to zoom. Drag to pan. Double-click to reset.
+*   **Navigation**: Use the bottom thumbnail strip, or press arrow keys `←` / `→`. 
+*   **Metadata**: Click `i` or the **Info** button to see EXIF data (Date, Camera, ISO, Location, etc.).
+*   **Exit**: Click `✖️` or press `Esc` to return to the gallery.
+
+### Keyboard Shortcuts
+*   `←` / `→`: Next/Prev Image.
+*   `Esc`: Close Viewer / Reset View.
+*   `Enter`: Open selected image.
+*   `I`: Toggle Info/Metadata.
+*   `F`: Toggle Fullscreen.
+*   `T`: Toggle Thumbnails.
 
 ---
 

@@ -21,6 +21,23 @@
 
     <!-- UI Layer (Always on top) -->
     <div id="ui-layer">
+        <!-- Loading Screen -->
+        <div id="loading-screen">
+            <div class="spinner"></div>
+            <div id="loading-text">Loading Gallery... 0%</div>
+            <div id="loading-bar-container">
+                <div id="loading-bar"></div>
+            </div>
+            <div id="loading-stats"
+                style="margin-top: 10px; font-family: monospace; color: #888; font-size: 0.9em; text-align: center;">
+                <div id="loading-file">Initializing...</div>
+                <div>
+                    <span id="loading-data">0.00 MB</span> |
+                    <span id="loading-speed">0 KB/s</span>
+                </div>
+            </div>
+        </div>
+
         <h1 id="title"></h1>
         <div id="fps-counter"
             style="position: fixed; top: 10px; left: 10px; font-size: 0.8em; opacity: 0.7; z-index: 100; font-family: monospace;">
@@ -28,11 +45,10 @@
 
 
         <!-- Toggle Switch -->
-        <button id="mode-toggle">3D</button>
-
-        <!-- Metadata Overlay -->
-        <div id="metadataViewer" class="hidden"></div>
-        <button id="toggleMetadata" class="hidden">ℹ️</button>
+        <div id="top-controls">
+            <button id="global-fullscreen" title="Go Fullscreen">⛶</button>
+            <button id="mode-toggle">3D</button>
+        </div>
 
         <!-- Navigation Hints / Arrows (Optional, can be hidden in 3D if preferred, but good for unified UX) -->
         <button id="leftArrow" class="nav-arrow">❮</button>
@@ -40,7 +56,8 @@
 
         <!-- Home / Footer -->
         <footer>
-            <h2>© <a href="https://timothydo.me" target="_blank">Timothy Do</a> 2024. All Rights Reserved.</h2>
+            <h2>© <a href="https://timothydo.me/photography" target="_blank">TheDoShoots</a> 2025. By Timothy Do. All
+                Rights Reserved.</h2>
             <button id="home" onclick="window.location.href='../index.html'">🏠</button>
         </footer>
     </div>
@@ -53,10 +70,20 @@
 
     <!-- 2D Fullscreen Viewer Overlay (classic behavior) -->
     <div id="imageViewer" hidden>
-        <button id="exitViewer">✖️</button>
-        <button id="fullscreenToggle">⛶</button>
+        <!-- Controls Container -->
+        <div id="viewer-controls">
+            <button id="toggleThumbs" title="Toggle Palette">🖼️</button>
+            <button id="toggleMetadata" title="Info">ℹ️</button>
+            <button id="fullscreenToggle" title="Fullscreen">⛶</button>
+            <button id="exitViewer" title="Close">✖️</button>
+        </div>
+
         <div id="full-image-container"></div>
+        <div id="thumbnail-selector" class="visible"></div>
     </div>
+
+    <!-- Metadata Overlay (Moved to root for correct Z-index) -->
+    <div id="metadataViewer" class="hidden"></div>
 
     <!-- Light Pollution Map Overlay (Iframe) -->
     <div id="lightPollutionMapOverlay">

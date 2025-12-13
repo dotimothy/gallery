@@ -125,11 +125,22 @@ def createSampleImages(N=25,size=(4000,3000)):
         sample = cv.copyMakeBorder(sample,75,75,75,75,cv.BORDER_CONSTANT,None,value=0)
         cv.imwrite(f'{fullDir}/{i}.jpg',sample)
 
+import argparse
+
 if __name__ == '__main__':
-    if(len(os.listdir(fullDir)) == 0):
-        print('No images found in fulls directory. Creating sample images...')
-        createSampleImages()
+    parser = argparse.ArgumentParser(description='Prepare site images and metadata.')
+    parser.add_argument('-n', '--number', type=int, default=25, help='Number of sample images to generate if directory is empty')
+    args = parser.parse_args()
+
+    if len(os.listdir(fullDir)) == 0:
+        print(f'No images found in fulls directory. Creating {args.number} sample images...')
+        createSampleImages(N=args.number)
     else:
+        # If user explicitly asks for samples via -n but dir is not empty, we might ignore?
+        # Or should we warn?
+        # The prompt implies "allow users to specify...". If I already have images, I probably don't want to overwrite them with samples.
+        # But if the user WANTS to generate samples, they should probably clear the dir.
+        # However, to be helpful, let's say "Processing existing..."
         print('Processing existing images in fulls directory...')
 
     processable_files = []

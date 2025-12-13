@@ -356,7 +356,8 @@ class App {
         } else {
             this.view3d.hide();
             this.view2d.show();
-            this.view2d.goToIndex(this.currentIndex);
+            // Don't scroll to current index. Let user start fresh or stay where they were.
+            // this.view2d.goToIndex(this.currentIndex); 
 
             // Ensure arrows are hidden in grid view
             this.ui.leftArrow.hidden = true;

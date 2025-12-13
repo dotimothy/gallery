@@ -1,67 +1,74 @@
-
 export class View2D {
     constructor(container) {
         this.container = container;
-        this.initialized = false;
-        this.thumbs = [];
-        this.currentIndex = -1;
+        this.images = [];
+        this.onSelect = null;
     }
 
     init(images, onSelect) {
+        console.log("View2D Init:", images.length, "images");
         this.images = images;
         this.onSelect = onSelect;
-        this.container.innerHTML = '';
-        this.thumbs = []; // Clear old references
+        this.render();
+    }
 
-        // Build Grid
+    render() {
+        console.log("View2D Rendering into:", this.container);
+        this.container.innerHTML = '';
+        if (this.images.length === 0) {
+            console.warn("View2D: No images to render!");
+            this.container.innerHTML = '<p style="color:white;text-align:center;">No images found.</p>';
+            return;
+        }
         this.images.forEach((imgName, index) => {
             const thumb = document.createElement('div');
             thumb.className = 'thumb';
-            // Restored loading="lazy" for performance.
-            // Added decoding="async" to unblock main thread.
-            // Kept placeholder background.
-            thumb.style.backgroundColor = '#111';
-            thumb.innerHTML = `<img src="./thumbs/${imgName}.jpg" loading="lazy" decoding="async" alt="${imgName}" onerror="this.style.display='none'">`;
-            thumb.onclick = () => this.onSelect(index, true); // true = open viewer
+
+            const img = document.createElement('img');
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            img.src = `./thumbs/${imgName}.jpg`;
+            img.alt = `Photo ${index}`;
+            img.onerror = (e) => {
+                console.error(`Failed to load thumb: ${img.src}`);
+                thumb.style.backgroundColor = 'red'; // Visual debug
+            };
+
+            thumb.appendChild(img);
+
+            thumb.onclick = () => {
+                if (this.onSelect) this.onSelect(index, true);
+            };
+
             this.container.appendChild(thumb);
-            this.thumbs.push(thumb);
         });
 
-        // Add padding at bottom for footer/ui
+        // Add footer spacer
         const spacer = document.createElement('div');
-        spacer.style.height = "100px";
-        spacer.style.width = "100%";
+        spacer.style.width = '100%';
+        spacer.style.height = '100px';
         this.container.appendChild(spacer);
+    }
 
-        this.initialized = true;
+    goToIndex(index) {
+        // Highlight active thumbnail
+        const thumbs = this.container.getElementsByClassName('thumb');
+        for (let i = 0; i < thumbs.length; i++) {
+            if (thumbs[i]) thumbs[i].classList.toggle('active', i === index);
+        }
+
+        if (thumbs[index]) {
+            thumbs[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
     }
 
     show() {
         this.container.classList.add('active');
+        this.container.classList.remove('hidden'); // Just in case
     }
 
     hide() {
         this.container.classList.remove('active');
-    }
-
-    goToIndex(index) {
-        if (this.currentIndex === index) return;
-
-        // Remove old active
-        if (this.thumbs[this.currentIndex]) {
-            this.thumbs[this.currentIndex].classList.remove('active');
-        }
-
-        this.currentIndex = index;
-
-        // Add new active
-        if (this.thumbs[index]) {
-            this.thumbs[index].classList.add('active');
-
-            // Allow browser layout to settle if coming from hidden
-            setTimeout(() => {
-                this.thumbs[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 50);
-        }
+        this.container.classList.add('hidden');
     }
 }

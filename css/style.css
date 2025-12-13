@@ -48,6 +48,48 @@ button {
     z-index: 10;
 }
 
+/* Previous definitions removed in favor of Unified Viewer Controls */
+
+#thumbnail-selector {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 80px;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    padding: 5px;
+    box-sizing: border-box;
+    transition: transform 0.3s ease;
+    z-index: 99;
+}
+
+#thumbnail-selector.hidden {
+    transform: translateY(100%);
+}
+
+#thumbnail-selector .thumb-small {
+    height: 60px;
+    width: auto;
+    margin-right: 5px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+}
+
+#thumbnail-selector .thumb-small:hover {
+    opacity: 1.0;
+}
+
+#thumbnail-selector .thumb-small.active {
+    opacity: 1.0;
+    border-color: #007bff;
+}
+
 #ui-layer button,
 #ui-layer a,
 #ui-layer h1 {
@@ -74,22 +116,43 @@ button {
     pointer-events: none;
 }
 
-/* Mode Toggle */
-#mode-toggle {
+/* Mode Toggle & Global Controls */
+#top-controls {
     position: fixed;
     top: 20px;
+    top: max(20px, env(safe-area-inset-top));
+    /* Mobile Notch Support */
     right: 20px;
-    font-size: 1.5em;
-    /* Smaller than legacy huge buttons */
+    right: max(20px, env(safe-area-inset-right));
+    display: flex;
+    gap: 15px;
+    /* Consistent gap 15px matching viewer controls */
+    z-index: 20;
+}
+
+#mode-toggle,
+#global-fullscreen {
+    position: relative;
+    /* Relative to container */
+    top: auto;
+    right: auto;
+    font-size: 1.2em;
     border: 1px solid rgba(255, 255, 255, 0.3);
     padding: 5px 15px;
     border-radius: 20px;
     background: rgba(0, 0, 0, 0.5);
     transition: all 0.3s ease;
-    z-index: 20;
+    cursor: pointer;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    /* specific height */
 }
 
-#mode-toggle:hover {
+#mode-toggle:hover,
+#global-fullscreen:hover {
     background: rgba(255, 255, 255, 0.1);
     border-color: white;
 }
@@ -231,12 +294,32 @@ button {
     pointer-events: auto;
 }
 
+#imageViewer.transparent {
+    background: rgba(0, 0, 0, 0) !important;
+    pointer-events: none;
+    /* Allow clicks to pass through to 3D canvas */
+}
+
+#imageViewer.transparent>* {
+    pointer-events: auto;
+    /* Re-enable clicks for controls (children) */
+}
+
+/* Ensure empty container doesn't block 3D events in transparent mode */
+#imageViewer.transparent #full-image-container {
+    pointer-events: none;
+}
+
 #full-image-container {
     width: 100%;
     height: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
+    overflow: hidden;
+    /* Prevent dragging outside */
+    touch-action: none;
+    /* Disable browser zoom/scroll handling */
 }
 
 #full-image-container img {
@@ -244,8 +327,16 @@ button {
     max-height: 95%;
     object-fit: contain;
     box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
-    transform: translate3d(0, 0, 0);
-    /* Hardware accel */
+    transform-origin: center center;
+    transition: transform 0.1s linear;
+    /* Smooth pan, fast zoom */
+    cursor: grab;
+}
+
+#full-image-container img.zoomed {
+    cursor: grabbing;
+    transition: none;
+    /* No interaction lag during drag */
 }
 
 /* Loader */
@@ -308,18 +399,136 @@ button {
     line-height: 1.4;
 }
 
-#toggleMetadata {
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    font-size: 2em;
-    z-index: 61;
-    opacity: 0.5;
-    transition: opacity 0.2s;
+/* Unified Viewer Controls Container */
+#viewer-controls {
+    position: absolute;
+    top: 20px;
+    top: max(20px, env(safe-area-inset-top));
+    /* Mobile Notch Support */
+    right: 20px;
+    right: max(20px, env(safe-area-inset-right));
+    display: flex;
+    /* Flexbox for even spacing */
+    gap: 15px;
+    /* Consistent gap */
+    z-index: 200;
 }
 
-#toggleMetadata:hover {
+#exitViewer,
+#fullscreenToggle,
+#toggleMetadata,
+#toggleThumbs {
+    position: relative;
+    /* Relative to flex container */
+    top: auto;
+    right: auto;
+    color: white;
+    background: rgba(0, 0, 0, 0.5);
+    font-size: 24px;
+    width: 50px;
+    height: 50px;
+    line-height: 50px;
+    text-align: center;
+    padding: 0;
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    /* Softer look */
+    transition: background 0.2s, opacity 0.2s;
+    opacity: 0.8;
+}
+
+#toggleMetadata {
+    display: block !important;
+    /* Force display in flex layout, managed by JS visibility? Actually let's keep it visible always if useful, or JS can toggle 'hidden' class */
+}
+
+/* Hover effects */
+#viewer-controls button:hover {
     opacity: 1;
+    background: rgba(0, 0, 0, 0.8);
+    transform: scale(1.05);
+    /* Slight pop */
+}
+
+/* Mobile Enhancements */
+@media (max-width: 768px) {
+
+    /* Hide FPS counter on mobile to save space */
+    #fps-counter {
+        display: none !important;
+    }
+
+    /* Hide Nav Arrows on mobile (Swipe is primary) */
+    .nav-arrow {
+        display: none !important;
+    }
+
+    #viewer-controls {
+        top: 10px;
+        right: 10px;
+        gap: 10px;
+    }
+
+    #viewer-controls button {
+        width: 44px;
+        /* Larger touch target relative to screen */
+        height: 44px;
+        font-size: 20px;
+        background: rgba(0, 0, 0, 0.6);
+        /* Darker for contrast */
+    }
+
+    #title {
+        font-size: 1.2em;
+        /* Much smaller title */
+        top: 25px;
+        /* Align with buttons */
+        left: 20px;
+        width: auto;
+        max-width: 60%;
+        /* Limit width to avoid hitting right buttons */
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding-left: 0;
+        pointer-events: none;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    }
+
+    /* Move global controls slightly tighter */
+    #top-controls {
+        gap: 8px;
+        top: 15px;
+        right: 15px;
+    }
+
+    #mode-toggle,
+    #global-fullscreen {
+        font-size: 1.0em;
+        padding: 5px 12px;
+        height: 36px;
+    }
+
+    /* Footer adjustments */
+    footer {
+        bottom: 10px;
+        width: 70%;
+        /* Give space for Home button */
+        text-align: left;
+        left: 20px;
+    }
+
+    footer h2 {
+        font-size: 0.7em;
+    }
+
+    #home {
+        bottom: 15px;
+        right: 15px;
+        font-size: 1.8em;
+    }
 }
 
 /* Light Pollution Map Overlay */
@@ -375,7 +584,8 @@ button {
     font-size: 4em;
     opacity: 0.3;
     transition: opacity 0.2s;
-    z-index: 30;
+    z-index: 210;
+    /* Above viewer (50) and controls (200) */
 }
 
 .nav-arrow:hover {
@@ -409,6 +619,13 @@ footer h2 {
     display: inline-block;
 }
 
+footer a {
+    pointer-events: auto;
+    color: white;
+    /* Or specific brand color */
+    text-decoration: underline;
+}
+
 #home {
     position: fixed;
     bottom: 20px;
@@ -424,21 +641,57 @@ footer h2 {
 }
 
 /* Controls UI (Close, Fullscreen) */
-#exitViewer,
-#fullscreenToggle {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    font-size: 2.5em;
-    z-index: 55;
-    opacity: 0.6;
+/* Controls moved to Unified Viewer Controls section above */
+
+/* Loading Screen */
+#loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: black;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.5s ease-out;
 }
 
-#fullscreenToggle {
-    right: 70px;
+#loading-screen.hidden {
+    opacity: 0;
+    pointer-events: none;
 }
 
-#exitViewer:hover,
-#fullscreenToggle:hover {
-    opacity: 1;
+#loading-text {
+    margin-top: 20px;
+    font-size: 1.2em;
+    letter-spacing: 1px;
+    color: #888;
+}
+
+#loading-bar-container {
+    width: 300px;
+    height: 4px;
+    background: #333;
+    margin-top: 20px;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+#loading-bar {
+    width: 0%;
+    height: 100%;
+    background: white;
+    transition: width 0.1s linear;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top: 3px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
 }

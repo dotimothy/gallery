@@ -1,7 +1,6 @@
 
-// Three.js is loaded globally via CDN in index.html to avoid duplicate instance warnings
+// Three.js is loaded globally via CDN
 const THREE = window.THREE;
-
 
 export class View3D {
     constructor(container) {
@@ -9,299 +8,463 @@ export class View3D {
         this.camera = null;
         this.scene = null;
         this.renderer = null;
-        this.pivot = null; // Comparison group for rotation
+        this.pivot = null;
         this.frames = [];
         this.images = [];
-        this.currentIndex = 0;
 
-        // Globe Config
+        // Config
         this.radius = 25;
-
-        // Interaction State
         this.isDragging = false;
-        this.previousMousePosition = { x: 0, y: 0 };
+        this.previousMouse = { x: 0, y: 0 };
         this.targetRotation = { x: 0, y: 0 };
         this.currentRotation = { x: 0, y: 0 };
-        this.autoRotateSpeed = 0.001;
-        this.isInteracting = false;
     }
 
-    init(images, onSelect) {
+    init(images, onSelect, onPreload) {
+        if (!THREE) {
+            console.error("Three.js not loaded");
+            return;
+        }
+
         this.images = images;
         this.onSelect = onSelect;
+        this.onPreload = onPreload;
 
-        // 1. Scene
-        this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x000000);
-
-        // 2. Camera (Farther out)
-        const aspect = window.innerWidth / window.innerHeight;
-        this.camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
-        this.camera.position.z = 60;
-
-        // 3. Renderer
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-        this.renderer.setPixelRatio(window.devicePixelRatio);
+        // 1. SETUP RENDERER
+        this.renderer = new THREE.WebGLRenderer({
+            alpha: true,
+            antialias: true,
+            powerPreference: "high-performance"
+        });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.outputEncoding = THREE.sRGBEncoding;
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap pixel ratio for perf
+        this.container.innerHTML = ''; // Clear container
         this.container.appendChild(this.renderer.domElement);
 
-        // 4. Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-        this.scene.add(ambientLight);
+        // 2. SETUP SCENE
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x111111); // Dark Grey
 
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(1, 1, 2);
+        // 3. SETUP CAMERA
+        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+        // Config & Mobile Init
+        this.baseDistance = 80; // Standard distance
+        this.isZoomedIn = false;
+        this.camera.position.z = this.baseDistance;
+
+        // 4. ADD LIGHTS
+        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+        this.scene.add(ambient);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(50, 50, 100);
         this.scene.add(dirLight);
 
-        // 5. Globe Group
+        // 5. CREATE PIVOT & FRAMES
         this.pivot = new THREE.Group();
         this.scene.add(this.pivot);
-
-        // 6. Create Frames
         this.createFrames();
 
-        // 7. Raycaster
-        this.raycaster = new THREE.Raycaster();
-        this.mouse = new THREE.Vector2();
-
-        // 8. Bind Events
+        // 6. EVENTS
         this.bindEvents();
 
-        // Start
+        // 7. START LOOP
         this.animate = this.animate.bind(this);
+        this.animate();
+
+        console.log("View3D Initialized with images:", images.length);
     }
 
     createFrames() {
-        const textureLoader = new THREE.TextureLoader();
-        const geometry = new THREE.PlaneGeometry(4.8, 3.2); // Frame size
+        // Geometry - Use 1x1 plain so we can scale it to exact aspect ratio later
+        const geometry = new THREE.PlaneGeometry(1, 1);
         const count = this.images.length;
-        const goldenRatio = (1 + Math.sqrt(5)) / 2;
+        const vector = new THREE.Vector3();
 
-        this.images.forEach((imgName, i) => {
+        // Dynamic Radius: Expand sphere based on image count
+        // sqrt(N) ensures constant surface density
+        // Min radius 25, scaling factor 6
+        this.radius = Math.max(25, 6 * Math.sqrt(count));
+
+        // Update initial camera distance immediately so it's ready
+        this.baseDistance = this.getOptimalDistance();
+        this.camera.position.z = this.baseDistance;
+
+        for (let i = 0; i < count; i++) {
+            // Fibonacci Sphere Algorithm (Standard)
+            const phi = Math.acos(-1 + (2 * i) / count);
+            const theta = Math.sqrt(count * Math.PI) * phi;
+
+            const x = this.radius * Math.cos(theta) * Math.sin(phi);
+            const y = this.radius * Math.sin(theta) * Math.sin(phi);
+            const z = this.radius * Math.cos(phi);
+
+            // Material - Start with a Color so we SEE it even if texture fails
             const material = new THREE.MeshStandardMaterial({
-                color: 0xffffff,
-                roughness: 0.5,
-                metalness: 0.1,
+                color: 0xcccccc,
                 side: THREE.DoubleSide
             });
 
             const mesh = new THREE.Mesh(geometry, material);
-
-            // Fibonacci Sphere Algorithm
-            const i_norm = i + 0.5;
-            const phi = Math.acos(1 - 2 * i_norm / count);
-            const theta = Math.PI * 2 * i_norm * goldenRatio;
-
-            const x = this.radius * Math.sin(phi) * Math.cos(theta);
-            const y = this.radius * Math.cos(phi);
-            const z = this.radius * Math.sin(phi) * Math.sin(theta);
-
             mesh.position.set(x, y, z);
-            mesh.lookAt(0, 0, 0); // Face Center (Backs will face out)
-            mesh.rotateY(Math.PI); // Rotate 180 to face OUT
 
-            mesh.userData = { index: i, vector: new THREE.Vector3(x, y, z).normalize() };
+            // Set initial scale to "Square" placeholders of reasonable size (5x5)
+            // or 5x3.5 to match old default look before load
+            mesh.scale.set(5, 3.5, 1);
 
+            // Orient: Look AWAY from center
+            vector.copy(mesh.position).multiplyScalar(2);
+            mesh.lookAt(vector);
+
+            mesh.userData = { index: i, originalPos: mesh.position.clone() };
             this.pivot.add(mesh);
             this.frames.push(mesh);
 
-            textureLoader.load(`./thumbs/${imgName}.jpg`, (tex) => {
+            // Lazy Load Texture
+            const imgName = this.images[i];
+            new THREE.TextureLoader().load(`./thumbs/${imgName}.jpg`, (tex) => {
                 tex.encoding = THREE.sRGBEncoding;
-                tex.minFilter = THREE.LinearMipmapLinearFilter;
+                tex.minFilter = THREE.LinearFilter;
 
-                // Aspect Ratio
-                const imgAspect = tex.image.width / tex.image.height;
-                const h = 3.2;
-                const w = h * imgAspect;
-                mesh.scale.set(w / 4.8, 1, 1);
+                // Adjust scale for aspect ratio
+                // We want a fixed height (Reference height 5 is good for visibility)
+                const REF_HEIGHT = 5;
+                const aspect = tex.image.width / tex.image.height;
+
+                mesh.scale.set(REF_HEIGHT * aspect, REF_HEIGHT, 1);
 
                 material.map = tex;
+                material.color.setHex(0xffffff); // Reset color to white once loaded
                 material.needsUpdate = true;
             });
-        });
+        }
+    }
+
+    getOptimalDistance() {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const isMobile = width < height;
+        // Scale distance relative to radius
+        // Mobile needs more distance (FOV constraint)
+        const multiplier = isMobile ? 7.0 : 3.2;
+        return this.radius * multiplier;
     }
 
     bindEvents() {
-        // Drag Rotation Logic
-        this.container.addEventListener('mousedown', (e) => {
+        const onDown = (x, y) => {
+            if (this.layout === 'LINE') return; // Disable drag rotation in Line mode for now
             this.isDragging = true;
-            this.isInteracting = true;
-            this.previousMousePosition = { x: e.clientX, y: e.clientY };
-        });
+            this.previousMouse = { x, y };
+        };
 
-        document.addEventListener('mousemove', (e) => {
+        const onMove = (x, y) => {
             if (this.isDragging) {
-                const deltaMove = {
-                    x: e.clientX - this.previousMousePosition.x,
-                    y: e.clientY - this.previousMousePosition.y
-                };
+                const deltaX = x - this.previousMouse.x;
+                const deltaY = y - this.previousMouse.y;
 
-                // Add to target rotation
-                this.targetRotation.y += deltaMove.x * 0.005;
-                this.targetRotation.x += deltaMove.y * 0.005;
+                this.targetRotation.y += deltaX * 0.005;
+                this.targetRotation.x += deltaY * 0.005;
 
-                this.previousMousePosition = { x: e.clientX, y: e.clientY };
+                this.previousMouse = { x, y };
             }
+        };
 
-            // Mouse tracking for raycaster
-            this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-            this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-        });
-
-        document.addEventListener('mouseup', () => {
-            this.isDragging = false;
-            setTimeout(() => this.isInteracting = false, 2000); // Resume auto-rotate after delay
-        });
-
-        // Touch Support
-        this.container.addEventListener('touchstart', (e) => {
-            this.isDragging = true;
-            this.isInteracting = true;
-            this.previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        }, { passive: false });
-
-        this.container.addEventListener('touchmove', (e) => {
+        const onUp = () => {
             if (this.isDragging) {
-                const deltaMove = {
-                    x: e.touches[0].clientX - this.previousMousePosition.x,
-                    y: e.touches[0].clientY - this.previousMousePosition.y
-                };
-
-                this.targetRotation.y += deltaMove.x * 0.01;
-                this.targetRotation.x += deltaMove.y * 0.01;
-
-                this.previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                this.isDragging = false;
+                // Add subtle throw/inertia stop here if desired later
             }
-        }, { passive: false });
+            this.previousPinchDist = 0; // Reset pinch
+        };
 
-        this.container.addEventListener('touchend', () => {
-            this.isDragging = false;
-            setTimeout(() => this.isInteracting = false, 2000);
-        });
+        // Zoom Handler
+        const handleZoom = (delta) => {
+            if (this.isZoomedIn) return; // Don't interfere with transition
 
-        // Click to Select
-        this.container.addEventListener('click', (e) => {
-            if (Math.abs(e.clientX - this.previousMousePosition.x) < 5 &&
-                Math.abs(e.clientY - this.previousMousePosition.y) < 5) { // Ensure it's not a drag
-                this.raycast();
-            }
-            // Update pos just in case
-            this.previousMousePosition = { x: e.clientX, y: e.clientY };
-        });
+            const zoomSpeed = 0.5;
+            let newZ = this.camera.position.z + delta * zoomSpeed;
+
+            // Clamp Zoom
+            // In LINE layout, allow getting much closer
+            const minZ = this.layout === 'LINE' ? 5 : this.radius * 1.5; // Don't go inside sphere
+            const maxZ = this.getOptimalDistance() * 2; // Allow backing out 2x default
+
+            newZ = Math.max(minZ, Math.min(newZ, maxZ));
+
+            this.camera.position.z = newZ;
+            // Update baseDistance so resize doesn't snap it back immediately
+            // But actually we might want resize to respect this new manual distance?
+            // For now, let's update baseDistance = newZ so it persists.
+            this.baseDistance = newZ;
+        };
+
+        // Mouse Events
+        this.container.addEventListener('mousedown', e => onDown(e.clientX, e.clientY));
+        window.addEventListener('mousemove', e => onMove(e.clientX, e.clientY));
+        window.addEventListener('mouseup', onUp);
 
         // Wheel Zoom
-        this.container.addEventListener('wheel', (e) => {
+        this.container.addEventListener('wheel', e => {
+            // Prevent page scroll only if over canvas
             e.preventDefault();
-            this.camera.position.z += e.deltaY * 0.05;
-            this.camera.position.z = Math.max(30, Math.min(100, this.camera.position.z));
+            handleZoom(Math.sign(e.deltaY) * 5); // 5 units per tick
         }, { passive: false });
-    }
 
-    raycast() {
-        this.raycaster.setFromCamera(this.mouse, this.camera);
-        // Note: raycast against pivot.children to hit meshes
-        const intersects = this.raycaster.intersectObjects(this.pivot.children);
+        // Touch Events (Swipe + Pinch)
+        this.previousPinchDist = 0;
 
-        if (intersects.length > 0) {
-            const index = intersects[0].object.userData.index;
-            // Trigger the sequence: Rotate -> Zoom -> Open Viewer
-            this.zoomAndSelect(index);
-        }
+        this.container.addEventListener('touchstart', e => {
+            if (e.touches.length === 1) {
+                onDown(e.touches[0].clientX, e.touches[0].clientY);
+            } else if (e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                this.previousPinchDist = Math.sqrt(dx * dx + dy * dy);
+                this.isDragging = false; // Pinch overrides drag
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchmove', e => {
+            if (e.touches.length === 1) {
+                onMove(e.touches[0].clientX, e.touches[0].clientY);
+            } else if (e.touches.length === 2) {
+                e.preventDefault(); // Prevent browser zoom
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (this.previousPinchDist > 0) {
+                    const delta = this.previousPinchDist - dist; // + means pinching IN (shrinking fingers) -> Zoom OUT (camera Z increase)
+                    // Sensitivity
+                    handleZoom(delta * 0.5);
+                }
+                this.previousPinchDist = dist;
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', onUp);
+
+        // Click / Select logic ... (raycaster) -- REMAINING CODE BELOW --
+        this.raycaster = new THREE.Raycaster();
+        this.container.addEventListener('click', (e) => {
+            // ... (keep click logic below)
+            if (this.isDragging) return; // Ignore drag-clicks
+
+            // Normalize mouse
+            const mouse = new THREE.Vector2(
+                (e.clientX / window.innerWidth) * 2 - 1,
+                -(e.clientY / window.innerHeight) * 2 + 1
+            );
+
+            this.raycaster.setFromCamera(mouse, this.camera);
+            const intersects = this.raycaster.intersectObjects(this.pivot.children);
+
+            if (intersects.length > 0) {
+                const idx = intersects[0].object.userData.index;
+                this.selectIndex(idx);
+            }
+        });
+
+        // Resize
+        window.addEventListener('resize', () => this.resize());
     }
 
     zoomAndSelect(index) {
         if (!this.frames[index]) return;
         this.currentIndex = index;
-        this.isNavigating = true; // Pause auto-rotation loop
 
+        // If we are already in LINE layout, just animate to the new center
+        if (this.layout === 'LINE') {
+            this.enterLineView(index);
+            return;
+        }
+
+        // Standard Sphere Rotation Logic
         const targetMesh = this.frames[index];
+        const currentWorldPos = new THREE.Vector3();
+        targetMesh.getWorldPosition(currentWorldPos);
+        const targetWorldPos = new THREE.Vector3(0, 0, this.radius);
+        const rotationQ = new THREE.Quaternion().setFromUnitVectors(
+            currentWorldPos.normalize(),
+            targetWorldPos.normalize()
+        );
+        const startQ = this.pivot.quaternion.clone();
+        const targetQ = rotationQ.multiply(startQ);
 
-        // 1. Calculate Target Rotation (align mesh normal to camera)
-        // Target Vector: (0, 0, 1) - Facing camera
-        // Start Vector: mesh.userData.vector (Local position on sphere)
-        const startVec = targetMesh.userData.vector.clone();
-        const targetVec = new THREE.Vector3(0, 0, 1);
-        const targetQ = new THREE.Quaternion().setFromUnitVectors(startVec, targetVec);
-
-        // 2. Animate Globe Rotation
         gsap.to(this.pivot.quaternion, {
             x: targetQ.x,
             y: targetQ.y,
             z: targetQ.z,
             w: targetQ.w,
-            duration: 1.0,
+            duration: 1.2,
             ease: "power2.inOut",
-            onUpdate: () => {
-                // Keep Euler vars in sync to prevent snap after animation behavior resumes
-                const euler = new THREE.Euler().setFromQuaternion(this.pivot.quaternion);
-                // Note: Euler angles are not unique, but this usually works enough for continuity
-                this.currentRotation.x = euler.x;
-                this.currentRotation.y = euler.y;
-                this.targetRotation.x = euler.x;
-                this.targetRotation.y = euler.y;
-            },
             onComplete: () => {
-                this.isNavigating = false;
-                // 4. Open Viewer
                 this.onSelect(index, true);
+                this.isZoomedIn = false;
             }
         });
 
-        // 3. Animate Camera Zoom In
-        // Move closer to the surface (Radius is 25, Camera at 60. Target ~32?)
+        // Zoom Camera In
         gsap.to(this.camera.position, {
-            z: 32,
-            duration: 1.0,
-            ease: "power2.inOut"
+            z: 40,
+            duration: 1.2,
+            ease: "power2.inOut",
+            onComplete: () => {
+                gsap.to(this.camera.position, {
+                    z: this.baseDistance,
+                    duration: 0.5,
+                    delay: 0.1
+                });
+            }
         });
     }
 
-    // Legacy method optional, but we removed its internal usage
+    enterLineView(targetIndex) {
+        this.layout = 'LINE';
+        this.currentIndex = targetIndex;
+
+        // 1. Reset Pivot Rotation to Identity (Straight line)
+        // We animate this or snap it? Animate looks better.
+        // Also reset state vars so they don't snap when we return to Sphere
+        this.targetRotation = { x: 0, y: 0 };
+        this.currentRotation = { x: 0, y: 0 };
+
+        gsap.to(this.pivot.rotation, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.out" });
+
+        // 2. Animate Camera to a good viewing distance for simple line
+        const lineDist = 15; // Tighter focus on single image (was 30)
+        gsap.to(this.camera.position, { z: lineDist, duration: 0.8, ease: "power2.out" });
+
+        // 3. Move all frames to Line positions
+        const spacing = 12; // Gap between frames
+
+        this.frames.forEach((mesh, i) => {
+            // Target is at 0. Others are offset relative to target.
+            const offset = i - targetIndex;
+            const targetX = offset * spacing;
+            const targetY = 0;
+            const targetZ = 0; // Flat line
+
+            gsap.to(mesh.position, {
+                x: targetX,
+                y: targetY,
+                z: targetZ,
+                duration: 0.8,
+                ease: "power2.out"
+            });
+
+            // Rotate frames to face forward (0,0,1 direction)
+            // Use Quaternion for smooth shortest-path rotation
+            gsap.to(mesh.quaternion, {
+                x: 0,
+                y: 0,
+                z: 0,
+                w: 1, // Identity Quaternion (Face Z+)
+                duration: 0.8,
+                ease: "power2.out"
+            });
+        });
+    }
+
+    exitLineView() {
+        if (this.layout !== 'LINE') return;
+        this.layout = 'SPHERE';
+
+        // 1. Reset Camera to Sphere base distance (Reset zoom)
+        const defaultSphereDist = this.getOptimalDistance();
+
+        // Update state so resize respects this reset
+        this.baseDistance = defaultSphereDist;
+
+        gsap.to(this.camera.position, { z: defaultSphereDist, duration: 1.0, ease: "power2.inOut" });
+
+        // 2. Return frames to Sphere positions AND Rotations
+        const dummy = new THREE.Object3D(); // Helper to calculate target rotation
+
+        this.frames.forEach((mesh, i) => {
+            const original = mesh.userData.originalPos;
+
+            // Calculate Target Rotation (Look away from center)
+            dummy.position.copy(original);
+            dummy.lookAt(original.clone().multiplyScalar(2));
+            dummy.updateMatrix(); // Ensure rotation is updated
+
+            // Animate Position
+            gsap.to(mesh.position, {
+                x: original.x,
+                y: original.y,
+                z: original.z,
+                duration: 1.0,
+                ease: "power2.inOut"
+            });
+
+            // Animate Rotation (Quaternion)
+            gsap.to(mesh.quaternion, {
+                x: dummy.quaternion.x,
+                y: dummy.quaternion.y,
+                z: dummy.quaternion.z,
+                w: dummy.quaternion.w,
+                duration: 1.0,
+                ease: "power2.inOut"
+            });
+        });
+    }
+
+    selectIndex(index) {
+        if (!this.frames[index]) return;
+        this.currentIndex = index;
+        if (this.onPreload) this.onPreload(index);
+
+        // Direct handoff to App logic (which triggers enterLineView)
+        // Skip the intermediate sphere zoom/rotation
+        this.onSelect(index, true);
+    }
+
     goToIndex(index) {
-        // ...
+        if (this.frames[index]) {
+            this.currentIndex = index;
+            // Optional: Rotate to face it?
+            // For now just update state to avoid crash
+        }
+    }
+
+    animate() {
+        // Smooth Rotation Inertia
+        // Only apply in SPHERE mode. In LINE mode, rotation is fixed (controlled by GSAP or static).
+        if (this.layout !== 'LINE') {
+            this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * 0.1;
+            this.currentRotation.y += (this.targetRotation.y - this.currentRotation.y) * 0.1;
+
+            this.pivot.rotation.x = this.currentRotation.x;
+            this.pivot.rotation.y = this.currentRotation.y;
+        }
+
+        // Auto Rotate
+        if (!this.isDragging) {
+            this.targetRotation.y += 0.0005;
+        }
+
+        this.renderer.render(this.scene, this.camera);
+        requestAnimationFrame(this.animate);
     }
 
     resize() {
         if (!this.camera || !this.renderer) return;
-        this.camera.aspect = window.innerWidth / window.innerHeight;
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-    }
+        this.renderer.setSize(width, height);
 
-    animate() {
-        if (!this.renderer) return;
+        // Mobile Fit Logic (Aggressive)
+        // Recalculate based on current dynamic radius
+        this.baseDistance = this.getOptimalDistance();
 
-        // Skip rotation logic if we are navigating/zooming specifically
-        if (!this.isNavigating) {
-            // Smooth Rotation
-            this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * 0.1;
-            this.currentRotation.y += (this.targetRotation.y - this.currentRotation.y) * 0.1;
-
-            // Apply rotation
-            this.pivot.rotation.x = this.currentRotation.x;
-            this.pivot.rotation.y = this.currentRotation.y;
-
-            // Auto Rotate if idle
-            if (!this.isInteracting && !this.isDragging) {
-                this.targetRotation.y += this.autoRotateSpeed;
-            }
-        }
-
-        this.renderer.render(this.scene, this.camera);
-        this.animationId = requestAnimationFrame(this.animate);
-    }
-
-    show() {
-        this.container.classList.remove('hidden');
-        if (!this.animationId) this.animate();
-    }
-
-    hide() {
-        this.container.classList.add('hidden');
-        if (this.animationId) {
-            cancelAnimationFrame(this.animationId);
-            this.animationId = null;
+        if (!this.isZoomedIn) {
+            this.camera.position.z = this.baseDistance;
         }
     }
+
+    show() { this.container.style.display = 'block'; this.resize(); }
+    hide() { this.container.style.display = 'none'; }
 }

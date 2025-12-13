@@ -296,6 +296,10 @@ class App {
             if (e.key === 'Escape') this.closeFullscreen();
             if (e.key === 'Enter') this.enterFullscreen();
             if (e.key === 'i' || e.key === 'I') this.toggleMetadata();
+            if (e.key === 't' || e.key === 'T') {
+                const thumbs = document.getElementById('thumbnail-selector');
+                if (thumbs) thumbs.classList.toggle('hidden');
+            }
         });
 
         // Touch Swipe

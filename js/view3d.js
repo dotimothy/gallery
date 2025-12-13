@@ -145,8 +145,9 @@ export class View3D {
         const height = window.innerHeight;
         const isMobile = width < height;
         // Scale distance relative to radius
-        // Mobile needs more distance (FOV constraint)
-        const multiplier = isMobile ? 7.0 : 3.2;
+        // Mobile needs more distance (FOV constraint) but 7.0 was too far/small.
+        // Reducing to 4.0 to make it fill the screen better.
+        const multiplier = isMobile ? 4.0 : 3.2;
         return this.radius * multiplier;
     }
 

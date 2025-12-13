@@ -525,7 +525,7 @@ button {
     }
 
     #home {
-        bottom: 15px;
+        bottom: 100px;
         right: 15px;
         font-size: 1.8em;
     }
@@ -628,7 +628,8 @@ footer a {
 
 #home {
     position: fixed;
-    bottom: 20px;
+    bottom: 100px;
+    /* User preferred specific value */
     right: 20px;
     font-size: 2em;
     opacity: 0.5;

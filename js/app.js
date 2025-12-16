@@ -1,6 +1,7 @@
 
 import { View3D } from './view3d.js';
 import { View2D } from './view2d.js';
+import { SettingsManager } from './settings.js';
 
 class App {
     constructor() {
@@ -9,6 +10,9 @@ class App {
         this.images = [];
         this.metadata = {};
         this.isMobile = (typeof window.orientation !== "undefined") || (navigator.userAgent.indexOf('IEMobile') !== -1);
+
+        // Debug Flag
+        this.isDebug = new URLSearchParams(window.location.search).has('debug');
 
         // Touch State
         this.touchStartX = 0;
@@ -39,14 +43,26 @@ class App {
         this.view3d = new View3D(document.getElementById('gallery-3d'));
         this.view3d.init(this.images,
             (index, openViewer) => this.selectImage(index, openViewer),
-            (index) => this.preloadHighRes(index)
+            (index) => this.preloadHighRes(index),
+            this.isDebug // Pass debug flag
         );
 
         this.view2d = new View2D(document.getElementById('gallery-2d'));
-        this.view2d.init(this.images, (index) => this.selectImage(index, true));
+        this.view2d.init(this.images, (index) => this.selectImage(index, true), this.isDebug);
+
+        // Settings System
+        this.settings = new SettingsManager((key, value) => this.applySetting(key, value), this.isMobile);
+        // Apply initial settings
+        this.applyAllSettings();
 
         this.bindEvents();
         this.loadData();
+    }
+
+    log(msg, ...args) {
+        if (this.isDebug) {
+            console.log(`[App] ${msg}`, ...args);
+        }
     }
 
     async loadData() {
@@ -64,7 +80,7 @@ class App {
             // So we can use image_order directly.
             this.images = data.image_order || Object.keys(data).filter(k => k !== 'image_order');
 
-            console.log("Loaded metadata with", this.images.length, "images.");
+            this.log(`Loaded metadata with ${this.images.length} images.`);
 
             // 3. Preload Thumbnails (Blocking)
             await this.preloadAllThumbnails();
@@ -109,20 +125,52 @@ class App {
             this.typeTitle(); // Original call from loadData
 
         } catch (error) {
-            console.warn("Metadata load failed, falling back to static list.", error);
+            if (this.isDebug) console.warn("Metadata load failed, falling back to static list.", error);
             document.getElementById('loading-text').innerText = "Error loading gallery."; // Original error message
             this.useStaticFallback();
             // Re-init views with fallback data
             this.view3d.init(
                 this.images,
                 (index, openViewer) => this.selectImage(index, openViewer),
-                (index) => this.preloadHighRes(index)
+                (index) => this.preloadHighRes(index),
+                this.isDebug
             );
-            this.view2d.init(this.images, (index) => this.selectImage(index, true));
+            this.view2d.init(this.images, (index) => this.selectImage(index, true), this.isDebug);
             this.switchMode(this.mode); // Initial State
             this.selectImage(0); // Select first image on fallback
             this.typeTitle();
         }
+    }
+
+    applySetting(key, value) {
+        // Update view logic
+        if (key === 'resolution' || key === 'sphereSpacing' || key === 'particleCount') {
+            this.view3d.updateSettings(key, value);
+        }
+        if (key === 'gridColumns') {
+            this.view2d.updateSettings(key, value);
+        }
+
+        // Update display values in settings modal
+        const displayMap = {
+            'resolution': { id: 'disp-resolution', suffix: 'x' },
+            'sphereSpacing': { id: 'disp-sphere', suffix: '' },
+            'particleCount': { id: 'disp-particles', suffix: '' },
+            'gridColumns': { id: 'disp-grid', suffix: '' }
+        };
+
+        if (displayMap[key]) {
+            const display = document.getElementById(displayMap[key].id);
+            if (display) {
+                display.innerText = value + displayMap[key].suffix;
+            }
+        }
+    }
+
+    applyAllSettings() {
+        // Sync all settings from manager to views
+        const keys = ['resolution', 'sphereSpacing', 'particleCount', 'gridColumns'];
+        keys.forEach(k => this.applySetting(k, this.settings.get(k)));
     }
 
     preloadAllThumbnails() {
@@ -191,7 +239,7 @@ class App {
                     // Success
                     loadedCount++;
                 } catch (err) {
-                    console.warn("Failed to load thumb:", imgName, err);
+                    if (this.isDebug) console.warn("Failed to load thumb:", imgName, err);
                     loadedCount++; // Count as done to proceed
                 } finally {
                     activeDownloads--;
@@ -212,7 +260,7 @@ class App {
     }
 
     preloadFullImages() {
-        console.log("Starting background preload of full images...");
+        this.log("Starting background preload of full images...");
         const dir = this.useDataSaver ? 'thumbs' : 'fulls';
         if (dir === 'thumbs') return;
 
@@ -225,7 +273,7 @@ class App {
                 img.src = `./fulls/${imgName}.jpg`;
                 img.onload = () => {
                     loadedCount++;
-                    if (loadedCount === this.images.length) console.log("All full images preloaded.");
+                    if (loadedCount === this.images.length) this.log("All full images preloaded.");
                 };
             }, index * 200);
         });
@@ -243,8 +291,8 @@ class App {
 
     initViews() {
         const onSelect = (index, openViewer) => this.selectImage(index, openViewer);
-        this.view3d.init(this.images, onSelect);
-        this.view2d.init(this.images, onSelect);
+        this.view3d.init(this.images, onSelect, null, this.isDebug);
+        this.view2d.init(this.images, onSelect, this.isDebug);
 
         // Initial State
         this.switchMode(this.mode);
@@ -293,7 +341,14 @@ class App {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowLeft') this.prev();
             if (e.key === 'ArrowRight') this.next();
-            if (e.key === 'Escape') this.closeFullscreen();
+            if (e.key === 'Escape') {
+                // If in 3D and Magnifier is active (viewer not transparent), exit Magnifier first
+                if (this.mode === '3D' && !this.ui.imageViewer.classList.contains('transparent')) {
+                    this.toggleMagnifier();
+                } else {
+                    this.closeFullscreen();
+                }
+            }
             if (e.key === 'Enter') this.enterFullscreen();
             if (e.key === 'i' || e.key === 'I') this.toggleMetadata();
             if (e.key === 't' || e.key === 'T') {
@@ -318,9 +373,78 @@ class App {
         // Viewer Controls
         this.ui.exitViewer.onclick = () => this.closeFullscreen();
         this.ui.fullscreenToggle.onclick = () => this.toggleNativeFullscreen();
+        const zoomBtn = document.getElementById('zoomBtn');
+        if (zoomBtn) {
+            zoomBtn.onclick = (e) => {
+                e.stopPropagation(); // Prevent propagation
+                this.log("Zoom Btn Clicked");
+                this.toggleMagnifier();
+            };
+        } else {
+            console.error("Zoom Btn not found in DOM");
+        }
 
         // Light Pollution Map
         this.ui.lightPollutionClose.onclick = () => this.hideLightPollutionMap();
+
+        // --- Settings UI Events ---
+        const settingsModal = document.getElementById('settingsModal');
+        const openSettings = document.getElementById('toggleSettings');
+        const closeSettings = document.getElementById('closeSettings');
+        const resetSettings = document.getElementById('resetSettings');
+
+        if (openSettings) {
+            openSettings.onclick = () => {
+                settingsModal.classList.remove('hidden');
+                setTimeout(() => settingsModal.classList.add('visible'), 10);
+
+                // Toggle Groups based on Mode
+                const group3d = document.getElementById('group-3d');
+                const group2d = document.getElementById('group-2d');
+                if (group3d) group3d.style.display = (this.mode === '3D') ? 'block' : 'none';
+                if (group2d) group2d.style.display = (this.mode === '2D') ? 'block' : 'none';
+
+                // Sync sliders to current values
+                document.getElementById('set-resolution').value = this.settings.get('resolution');
+                document.getElementById('set-sphere').value = this.settings.get('sphereSpacing');
+                document.getElementById('set-particles').value = this.settings.get('particleCount');
+                document.getElementById('set-grid').value = this.settings.get('gridColumns');
+            };
+        }
+
+        if (closeSettings) {
+            closeSettings.onclick = () => {
+                settingsModal.classList.remove('visible');
+                setTimeout(() => settingsModal.classList.add('hidden'), 300);
+            };
+        }
+
+        // Inputs
+        const bindInput = (id, key, isFloat = false) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.oninput = (e) => {
+                    const val = isFloat ? parseFloat(e.target.value) : parseInt(e.target.value);
+                    this.settings.set(key, val);
+                };
+            }
+        };
+
+        bindInput('set-resolution', 'resolution', true);
+        bindInput('set-sphere', 'sphereSpacing', true);
+        bindInput('set-particles', 'particleCount', false);
+        bindInput('set-grid', 'gridColumns', false);
+
+        if (resetSettings) {
+            resetSettings.onclick = () => {
+                this.settings.reset();
+                // Update slider UI
+                document.getElementById('set-resolution').value = this.settings.get('resolution');
+                document.getElementById('set-sphere').value = this.settings.get('sphereSpacing');
+                document.getElementById('set-particles').value = this.settings.get('particleCount');
+                document.getElementById('set-grid').value = this.settings.get('gridColumns');
+            };
+        }
     }
 
     handleSwipe() {
@@ -367,7 +491,7 @@ class App {
 
     // Updated selectImage to calculate direction
     selectImage(index, openViewer = false, direction = 0) {
-        console.log("App.selectImage", index, "openViewer:", openViewer);
+        this.log(`selectImage Idx:${index} Open:${openViewer}`);
         if (index < 0 || index >= this.images.length) return;
 
         // Infer direction if not explicitly given and we are close
@@ -385,12 +509,14 @@ class App {
         // Update Metadata
         this.updateMetadata(index);
 
+        // Check visibility
+        const isViewerVisible = !this.ui.imageViewer.hidden;
+        this.log(`selectImage: ViewerVisible? ${isViewerVisible} ReqOpen? ${openViewer}`);
+
         // If requested (by 2D click OR 3D active click), open fullscreen viewer
         // Note: Legacy viewer is a 2D overlay, so it works on top of canvas nicely.
-        if (openViewer) {
-            this.openFullscreenViewer(index, direction);
-        } else if (!document.getElementById('imageViewer').hidden) {
-            // If viewer is already open, update it
+        if (openViewer || isViewerVisible) {
+            this.log("Calling openFullscreenViewer...");
             this.openFullscreenViewer(index, direction);
         }
 
@@ -530,7 +656,7 @@ class App {
 
     // --- Viewer Logic ---
     openFullscreenViewer(index, direction = 0) {
-        console.log("Opening Viewer for", index, "Dir:", direction);
+        this.log(`Opening Viewer for Idx:${index} Dir:${direction}`);
         const imgName = this.images[index];
         const dir = this.useDataSaver ? 'thumbs' : 'fulls';
 
@@ -572,6 +698,15 @@ class App {
             this.ui.leftArrow.hidden = false;
             this.ui.rightArrow.hidden = false;
 
+            // RESET UI STATE (Fix for navigation from Magnified state)
+            const zoomBtn = document.getElementById('zoomBtn');
+            if (zoomBtn) {
+                zoomBtn.innerText = '🔍';
+                zoomBtn.title = 'Zoom / Magnify';
+            }
+            const thumbs = document.getElementById('thumbnail-selector');
+            if (thumbs) thumbs.classList.remove('hidden');
+
             // Update Thumb Palette
             if (!this.thumbnailsCreated) {
                 this.createThumbSelector();
@@ -582,11 +717,38 @@ class App {
         }
 
         // --- 2D MODE: STANDARD DOM VIEWER ---
+        this.ui.imageViewer.hidden = false; // Fixed: Ensure hidden is removed so selectImage tracks visibility
         this.ui.imageViewer.classList.remove('transparent'); // Ensure black bg for 2D
 
         // Show Arrows for navigation
         this.ui.leftArrow.hidden = false;
         this.ui.rightArrow.hidden = false;
+
+        this.mountActiveImage(index, direction);
+
+        // Show Arrows for navigation
+        this.ui.leftArrow.hidden = false;
+        this.ui.rightArrow.hidden = false;
+
+        // Fade In Viewer
+        requestAnimationFrame(() => {
+            this.ui.imageViewer.classList.add('visible');
+        });
+    }
+
+    mountActiveImage(index, direction = 0) {
+        this.log(`mountActiveImage called for Idx:${index}`);
+        const imgName = this.images[index];
+        const container = this.ui.fullImageContainer;
+
+        // RESET UI STATE (Fix for navigation while zoomed)
+        const zoomBtn = document.getElementById('zoomBtn');
+        if (zoomBtn) {
+            zoomBtn.innerText = '🔍';
+            zoomBtn.title = 'Zoom / Magnify';
+        }
+        const thumbs = document.getElementById('thumbnail-selector');
+        if (thumbs) thumbs.classList.remove('hidden');
 
         // --- PREPARE OLD IMAGE FOR EXIT ---
         const oldImg = container.querySelector('img.active');
@@ -661,6 +823,24 @@ class App {
             }
         };
 
+        // Exposed Toggle Function for External Control (Magnifier Button)
+        container.toggleZoom = () => {
+            let isZoomed = false;
+            if (zoomLevel > 1) {
+                zoomLevel = 1;
+                isZoomed = false;
+            } else {
+                zoomLevel = 3.0; // Max zoom for magnifier
+                isZoomed = true;
+            }
+            pannedX = 0;
+            pannedY = 0;
+            // Ensure transition is active for the zoom
+            newImg.style.transition = 'transform 0.3s ease-in-out';
+            updateTransform();
+            return isZoomed;
+        };
+
         // Event Listeners
         container.onwheel = (e) => {
             e.preventDefault();
@@ -674,9 +854,17 @@ class App {
             }
         };
 
+        // Double Click to Toggle Zoom (Max)
+        // We expose this event also for the Magnifier Button
         container.ondblclick = (e) => {
+            // We can reuse the exposed method, or just run logic. 
+            // Reuse for consistency, but we need to update UI if triggered by double click?
+            // Since double click is a "hidden" feature, we might not update the button icon to 'Back'?
+            // Actually user might want to know they are in zoomed mode. 
+            // But updating App UI from here is messy.
+            // Let's just do the zoom. The button logic is primarily for the button interaction.
             if (zoomLevel > 1) zoomLevel = 1;
-            else zoomLevel = 2.5;
+            else zoomLevel = 3.0;
             pannedX = 0;
             pannedY = 0;
             newImg.style.transition = 'transform 0.3s ease-in-out';
@@ -748,16 +936,74 @@ class App {
         };
 
         container.appendChild(newImg);
-
-        // Update Metadata
-        this.updateMetadata(index);
-        this.ui.imageViewer.hidden = false;
-
-        // Fade In Viewer
-        requestAnimationFrame(() => {
-            this.ui.imageViewer.classList.add('visible');
-        });
     }
+
+    toggleMagnifier() {
+        this.log(`toggleMagnifier called. Mode: ${this.mode}`);
+        const btn = document.getElementById('zoomBtn');
+        const thumbs = document.getElementById('thumbnail-selector');
+
+        if (this.mode === '3D') {
+            const isMagnified = !this.ui.imageViewer.classList.contains('transparent');
+            if (isMagnified) {
+                // Exit Magnifier Mode (Return to 3D Line View)
+                this.ui.imageViewer.classList.add('transparent');
+                this.ui.fullImageContainer.innerHTML = ''; // Clear DOM image
+
+                // Restore Icon
+                if (btn) {
+                    btn.innerText = '🔍';
+                    btn.title = "Zoom / Magnify";
+                }
+
+                // Restore Thumbs
+                if (thumbs) thumbs.classList.remove('hidden');
+
+            } else {
+                // Enter Magnifier Mode (Overlay 2D Image)
+                this.ui.imageViewer.classList.remove('transparent');
+                this.mountActiveImage(this.currentIndex, 0);
+
+                // Update Icon
+                if (btn) {
+                    btn.innerText = '🔙';
+                    btn.title = "Return to Gallery";
+                }
+
+                // Auto-collapse carousel for better view
+                if (thumbs) thumbs.classList.add('hidden');
+            }
+        } else {
+            // 2D Mode: Use the explicit toggle handler if available
+            if (this.ui.fullImageContainer.toggleZoom) {
+                const isZoomed = this.ui.fullImageContainer.toggleZoom();
+
+                // Update UI based on new state
+                if (isZoomed) {
+                    // Zoomed In
+                    if (btn) {
+                        btn.innerText = '🔙';
+                        btn.title = "Reset Zoom";
+                    }
+                    if (thumbs) thumbs.classList.add('hidden');
+                } else {
+                    // Zoomed Out (Reset)
+                    if (btn) {
+                        btn.innerText = '🔍';
+                        btn.title = "Zoom / Magnify";
+                    }
+                    if (thumbs) thumbs.classList.remove('hidden');
+                }
+            } else {
+                // Fallback (Shouldn't happen if initialized correctly)
+                console.warn("toggleZoom handler not found");
+                const evt = new MouseEvent('dblclick', { bubbles: true, cancelable: true });
+                this.ui.fullImageContainer.dispatchEvent(evt);
+            }
+        }
+    }
+
+
 
     createThumbSelector() {
         const container = document.getElementById('thumbnail-selector');
@@ -813,6 +1059,11 @@ class App {
                 this.ui.leftArrow.hidden = true;
                 this.ui.rightArrow.hidden = true;
             }
+
+            // Reset Zoom Icon
+            const zoomBtn = document.getElementById('zoomBtn');
+            if (zoomBtn) zoomBtn.innerText = '🔍';
+
         }, 300);
 
         // Restore Global Top Controls

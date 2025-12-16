@@ -34,6 +34,8 @@ button {
     cursor: pointer;
     color: white;
     outline: none;
+    font-family: inherit;
+    /* Ensure Roboto is used */
 }
 
 /* UI Layer */
@@ -131,7 +133,8 @@ button {
 }
 
 #mode-toggle,
-#global-fullscreen {
+#global-fullscreen,
+#toggleSettings {
     position: relative;
     /* Relative to container */
     top: auto;
@@ -152,7 +155,8 @@ button {
 }
 
 #mode-toggle:hover,
-#global-fullscreen:hover {
+#global-fullscreen:hover,
+#toggleSettings:hover {
     background: rgba(255, 255, 255, 0.1);
     border-color: white;
 }
@@ -187,18 +191,21 @@ button {
     width: 100%;
     height: 100%;
     z-index: 5;
-    overflow-y: auto;
-    /* Scrollable grid */
-    padding-top: 100px;
-    /* Space for title */
+    display: grid;
+    grid-template-columns: repeat(var(--col-count, 4), 1fr);
+    grid-auto-rows: min-content;
+    gap: 15px;
+    padding: 100px 30px 30px 30px;
     box-sizing: border-box;
-    text-align: center;
+    overflow-y: auto;
+    overflow-x: hidden;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.5s ease-in-out;
     background: black;
-    /* Solid background for 2d mode */
 }
+
+/* Solid background for 2d mode */
 
 #gallery-2d.active {
     opacity: 1;
@@ -207,21 +214,14 @@ button {
 
 /* 2D Thumbs */
 .thumb {
-    display: inline-block;
-    width: calc(100%/5 - 20px);
-    /* Gap */
-    margin: 10px;
-    aspect-ratio: 3/2;
     position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 8px;
     cursor: pointer;
-    box-sizing: border-box;
-    padding: 0;
-    vertical-align: top;
-
-    /* Hardware Accel */
-    transform: translate3d(0, 0, 0);
-    will-change: transform, opacity;
-    transition: transform 0.2s ease-out, filter 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s;
+    background: #111;
 }
 
 .thumb.active img {
@@ -234,11 +234,7 @@ button {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 4px;
-    opacity: 0.8;
-    transition: opacity 0.2s, box-shadow 0.2s;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-    /* Natural Shadow */
+    display: block;
 }
 
 .thumb:hover {
@@ -251,24 +247,6 @@ button {
     box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
 }
 
-/* Response Grid */
-@media (max-width: 1280px) {
-    .thumb {
-        width: calc(100%/4 - 20px);
-    }
-}
-
-@media (max-width: 1024px) {
-    .thumb {
-        width: calc(100%/3 - 20px);
-    }
-}
-
-@media (max-width: 767px) {
-    .thumb {
-        width: calc(100%/2 - 20px);
-    }
-}
 
 /* 2D Fullscreen Overlay (#imageViewer legacy refactor) */
 #imageViewer {
@@ -303,6 +281,11 @@ button {
 #imageViewer.transparent>* {
     pointer-events: auto;
     /* Re-enable clicks for controls (children) */
+}
+
+#imageViewer.transparent #viewer-controls,
+#imageViewer.transparent #viewer-controls button {
+    pointer-events: auto !important;
 }
 
 /* Ensure empty container doesn't block 3D events in transparent mode */
@@ -417,7 +400,8 @@ button {
 #exitViewer,
 #fullscreenToggle,
 #toggleMetadata,
-#toggleThumbs {
+#toggleThumbs,
+#zoomBtn {
     position: relative;
     /* Relative to flex container */
     top: auto;
@@ -436,6 +420,10 @@ button {
     /* Softer look */
     transition: background 0.2s, opacity 0.2s;
     opacity: 0.8;
+}
+
+#zoomBtn {
+    border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
 #toggleMetadata {
@@ -695,4 +683,137 @@ footer a {
     border-top: 3px solid white;
     border-radius: 50%;
     animation: spin 1s linear infinite;
+}
+
+/* --- Settings Modal --- */
+#settingsModal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(5px);
+    z-index: 300;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+#settingsModal.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.settings-content {
+    background: rgba(20, 20, 20, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+    border-radius: 12px;
+    width: 90%;
+    max-width: 400px;
+    padding: 20px;
+    color: white;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 10px;
+}
+
+.settings-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.setting-group {
+    margin-bottom: 25px;
+}
+
+.setting-group h3 {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 15px;
+}
+
+label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+    gap: 10px;
+}
+
+label span:first-child {
+    font-size: 0.9rem;
+    flex: 1;
+}
+
+.val-display {
+    width: 50px;
+    text-align: right;
+    font-size: 0.85rem;
+    color: #4facfe;
+    font-family: monospace;
+}
+
+input[type="range"] {
+    flex: 2;
+    -webkit-appearance: none;
+    background: rgba(255, 255, 255, 0.1);
+    height: 4px;
+    border-radius: 2px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #4facfe;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.settings-footer {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 15px;
+}
+
+.btn-danger {
+    background: rgba(255, 60, 60, 0.2);
+    border: 1px solid rgba(255, 60, 60, 0.5);
+    color: #ff6b6b;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-danger:hover {
+    background: rgba(255, 60, 60, 0.4);
+}
+
+#closeSettings {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    cursor: pointer;
 }

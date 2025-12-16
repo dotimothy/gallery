@@ -28,8 +28,7 @@
             <div id="loading-bar-container">
                 <div id="loading-bar"></div>
             </div>
-            <div id="loading-stats"
-                style="margin-top: 10px; font-family: monospace; color: #888; font-size: 0.9em; text-align: center;">
+            <div id="loading-stats" style="margin-top: 10px; color: #888; font-size: 0.9em; text-align: center;">
                 <div id="loading-file">Initializing...</div>
                 <div>
                     <span id="loading-data">0.00 MB</span> |
@@ -46,13 +45,52 @@
 
         <!-- Toggle Switch -->
         <div id="top-controls">
+            <button id="toggleSettings" title="Settings">⚙️</button>
             <button id="global-fullscreen" title="Go Fullscreen">⛶</button>
             <button id="mode-toggle">3D</button>
         </div>
 
-        <!-- Navigation Hints / Arrows (Optional, can be hidden in 3D if preferred, but good for unified UX) -->
-        <button id="leftArrow" class="nav-arrow">❮</button>
-        <button id="rightArrow" class="nav-arrow">❯</button>
+        <!-- Settings Modal -->
+        <div id="settingsModal" class="hidden">
+            <div class="settings-content">
+                <div class="settings-header">
+                    <h2>Gallery Settings</h2>
+                    <button id="closeSettings">✖️</button>
+                </div>
+
+                <div class="setting-group" id="group-3d">
+                    <h3>3D Experience</h3>
+                    <label>
+                        <span>Resolution Quality</span>
+                        <input type="range" id="set-resolution" min="0.25" max="3.0" step="0.25" value="1.0">
+                        <span class="val-display" id="disp-resolution">1.0x</span>
+                    </label>
+                    <label>
+                        <span>Sphere Scale</span>
+                        <input type="range" id="set-sphere" min="1.0" max="15.0" step="0.5" value="3.0">
+                        <span class="val-display" id="disp-sphere">3.0</span>
+                    </label>
+                    <label>
+                        <span>Star Count</span>
+                        <input type="range" id="set-particles" min="0" max="50000" step="100" value="25000">
+                        <span class="val-display" id="disp-particles">25000</span>
+                    </label>
+                </div>
+
+                <div class="setting-group" id="group-2d">
+                    <h3>2D Layout</h3>
+                    <label>
+                        <span>Images per Row</span>
+                        <input type="range" id="set-grid" min="1" max="10" step="1" value="4">
+                        <span class="val-display" id="disp-grid">4</span>
+                    </label>
+                </div>
+
+                <div class="settings-footer">
+                    <button id="resetSettings" class="btn-danger">Reset to Defaults</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Home / Footer -->
         <footer>
@@ -61,6 +99,10 @@
             <button id="home" onclick="window.location.href='../index.html'">🏠</button>
         </footer>
     </div>
+
+    <!-- Navigation Hints / Arrows (Moved to root to ensure correct Z-Index stacking over viewer) -->
+    <button id="leftArrow" class="nav-arrow">❮</button>
+    <button id="rightArrow" class="nav-arrow">❯</button>
 
     <!-- 3D View Container -->
     <div id="gallery-3d"></div>
@@ -74,6 +116,7 @@
         <div id="viewer-controls">
             <button id="toggleThumbs" title="Toggle Palette">🖼️</button>
             <button id="toggleMetadata" title="Info">ℹ️</button>
+            <button id="zoomBtn" title="Zoom / Magnify">🔍</button>
             <button id="fullscreenToggle" title="Fullscreen">⛶</button>
             <button id="exitViewer" title="Close">✖️</button>
         </div>

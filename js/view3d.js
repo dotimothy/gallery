@@ -17,10 +17,21 @@ export class View3D {
         this.isDragging = false;
         this.previousMouse = { x: 0, y: 0 };
         this.targetRotation = { x: 0, y: 0 };
+        this.targetRotation = { x: 0, y: 0 };
         this.currentRotation = { x: 0, y: 0 };
+
+        // Time & Stats
+        this.clock = new THREE.Clock();
+        this.frameCount = 0;
+        this.lastTime = 0;
+        this.fpsElement = document.getElementById('fps-counter');
+
+        // Settings State
+        this.sphereSpacing = 6.0;
+        this.particleCount = 4800;
     }
 
-    init(images, onSelect, onPreload) {
+    init(images, onSelect, onPreload, isDebug = false) {
         if (!THREE) {
             console.error("Three.js not loaded");
             return;
@@ -29,6 +40,9 @@ export class View3D {
         this.images = images;
         this.onSelect = onSelect;
         this.onPreload = onPreload;
+        this.isDebug = isDebug;
+
+        // ... (rest of init) ...
 
         // 1. SETUP RENDERER
         this.renderer = new THREE.WebGLRenderer({
@@ -43,7 +57,7 @@ export class View3D {
 
         // 2. SETUP SCENE
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x111111); // Dark Grey
+        this.scene.background = new THREE.Color(0x050505); // Almost Black
 
         // 3. SETUP CAMERA
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -64,6 +78,7 @@ export class View3D {
         this.pivot = new THREE.Group();
         this.scene.add(this.pivot);
         this.createFrames();
+        this.createParticles();
 
         // 6. EVENTS
         this.bindEvents();
@@ -72,7 +87,7 @@ export class View3D {
         this.animate = this.animate.bind(this);
         this.animate();
 
-        console.log("View3D Initialized with images:", images.length);
+        if (this.isDebug) console.log(`[View3D] Initialized with ${images.length} images.`);
     }
 
     createFrames() {
@@ -83,8 +98,10 @@ export class View3D {
 
         // Dynamic Radius: Expand sphere based on image count
         // sqrt(N) ensures constant surface density
-        // Min radius 25, scaling factor 6
-        this.radius = Math.max(25, 6 * Math.sqrt(count));
+        // Dynamic Radius: Expand sphere based on image count
+        // sqrt(N) ensures constant surface density
+        // Min radius 25, scaling factor from settings (default 6)
+        this.radius = Math.max(25, this.sphereSpacing * Math.sqrt(count));
 
         // Update initial camera distance immediately so it's ready
         this.baseDistance = this.getOptimalDistance();
@@ -140,14 +157,52 @@ export class View3D {
         }
     }
 
+    createParticles() {
+        this.particleGroup = new THREE.Group();
+        this.scene.add(this.particleGroup);
+
+        const createSystem = (count, size, opacity) => {
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(count * 3);
+
+            for (let i = 0; i < count; i++) {
+                const r = 400 + Math.random() * 800; // Distance 400-1200
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos((Math.random() * 2) - 1);
+
+                positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+                positions[i * 3 + 2] = r * Math.cos(phi);
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const material = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: size,
+                transparent: true,
+                opacity: opacity,
+                sizeAttenuation: true
+            });
+
+            const points = new THREE.Points(geometry, material);
+            this.particleGroup.add(points);
+        };
+
+        // 1. Dust (Small, many) - 80% of total
+        createSystem(Math.floor(this.particleCount * 0.8), 1.2, 0.4);
+
+        // 2. Stars (Larger, fewer) - 20% of total
+        createSystem(Math.floor(this.particleCount * 0.2), 2.5, 0.8);
+    }
+
     getOptimalDistance() {
         const width = window.innerWidth;
         const height = window.innerHeight;
         const isMobile = width < height;
         // Scale distance relative to radius
-        // Mobile needs more distance (FOV constraint) but 7.0 was too far/small.
-        // Reducing to 4.0 to make it fill the screen better.
-        const multiplier = isMobile ? 4.0 : 3.2;
+        // Mobile needs more distance (FOV constraint)
+        // Adjusting multipliers to bring camera closer (Bigger Sphere)
+        const multiplier = isMobile ? 3.0 : 2.5;
         return this.radius * multiplier;
     }
 
@@ -430,11 +485,28 @@ export class View3D {
     }
 
     animate() {
-        // Smooth Rotation Inertia
-        // Only apply in SPHERE mode. In LINE mode, rotation is fixed (controlled by GSAP or static).
+        // Time
+        const dt = this.clock.getDelta();
+        const time = this.clock.elapsedTime;
+
+        // FPS Calculation
+        this.frameCount++;
+        if (time >= this.lastTime + 1.0) {
+            const fps = Math.round((this.frameCount * 1.0) / (time - this.lastTime));
+            if (this.fpsElement) this.fpsElement.innerText = `FPS: ${fps}`;
+            this.frameCount = 0;
+            this.lastTime = time;
+        }
+
+        // Smooth Rotation Inertia (Time-based Damping)
+        // Only apply in SPHERE mode.
         if (this.layout !== 'LINE') {
-            this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * 0.1;
-            this.currentRotation.y += (this.targetRotation.y - this.currentRotation.y) * 0.1;
+            // Lerp factor independent of framerate: 1 - exp(-speed * dt)
+            // Speed factor ~10.0 gives similar feel to original 0.1 at 60fps
+            const smoothFactor = 1.0 - Math.exp(-10.0 * dt);
+
+            this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * smoothFactor;
+            this.currentRotation.y += (this.targetRotation.y - this.currentRotation.y) * smoothFactor;
 
             this.pivot.rotation.x = this.currentRotation.x;
             this.pivot.rotation.y = this.currentRotation.y;
@@ -442,7 +514,15 @@ export class View3D {
 
         // Auto Rotate
         if (!this.isDragging) {
-            this.targetRotation.y += 0.0005;
+            // Speed should be "per second" now if using dt, but targetRotation is position accumulator
+            // Original: += 0.0005 per frame. At 60fps -> 0.03 per second.
+            this.targetRotation.y += 0.03 * dt;
+        }
+
+        // Animate Particles
+        if (this.particleGroup) {
+            this.particleGroup.rotation.y += 0.024 * dt; // Original 0.0004 * 60
+            this.particleGroup.rotation.x += 0.006 * dt; // Original 0.0001 * 60
         }
 
         this.renderer.render(this.scene, this.camera);
@@ -463,6 +543,45 @@ export class View3D {
 
         if (!this.isZoomedIn) {
             this.camera.position.z = this.baseDistance;
+        }
+    }
+
+    updateSettings(key, value) {
+        if (this.isDebug) console.log(`[View3D] Update ${key}: ${value}`);
+
+        if (key === 'resolution') {
+            // User requested up to 3x (Supersampling)
+            // Warning: High performance cost
+            this.renderer.setPixelRatio(value);
+        }
+
+        if (key === 'sphereSpacing') {
+            this.sphereSpacing = value;
+            // Re-create frames to adjust radius
+            // We need to clear old frames first
+            this.frames.forEach(f => {
+                this.pivot.remove(f);
+                if (f.geometry) f.geometry.dispose();
+                if (f.material) {
+                    if (f.material.map) f.material.map.dispose();
+                    f.material.dispose();
+                }
+            });
+            this.frames = [];
+            this.createFrames();
+        }
+
+        if (key === 'particleCount') {
+            this.particleCount = value;
+            if (this.particleGroup) {
+                this.scene.remove(this.particleGroup);
+                this.particleGroup.traverse(c => {
+                    if (c.geometry) c.geometry.dispose();
+                    if (c.material) c.material.dispose();
+                });
+                this.particleGroup = null;
+            }
+            this.createParticles();
         }
     }
 

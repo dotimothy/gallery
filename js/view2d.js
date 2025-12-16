@@ -5,18 +5,21 @@ export class View2D {
         this.onSelect = null;
     }
 
-    init(images, onSelect) {
-        console.log("View2D Init:", images.length, "images");
+    init(images, onSelect, isDebug = false) {
+        this.isDebug = isDebug;
+        if (this.isDebug) console.log(`[View2D] Init: ${images.length} images`);
         this.images = images;
         this.onSelect = onSelect;
+        // set default or initial from somewhere? App will call updateSettings on load potentially.
+        // But let's support it if we want. For now, App handles the initial sync.
         this.render();
     }
 
     render() {
-        console.log("View2D Rendering into:", this.container);
+        if (this.isDebug) console.log("[View2D] Rendering grid...");
         this.container.innerHTML = '';
         if (this.images.length === 0) {
-            console.warn("View2D: No images to render!");
+            if (this.isDebug) console.warn("View2D: No images to render!");
             this.container.innerHTML = '<p style="color:white;text-align:center;">No images found.</p>';
             return;
         }
@@ -65,6 +68,13 @@ export class View2D {
     show() {
         this.container.classList.add('active');
         this.container.classList.remove('hidden'); // Just in case
+    }
+
+    updateSettings(key, value) {
+        if (key === 'gridColumns') {
+            if (this.isDebug) console.log(`[View2D] Update gridColumns: ${value}`);
+            this.container.style.setProperty('--col-count', value);
+        }
     }
 
     hide() {

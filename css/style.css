@@ -454,6 +454,11 @@ button {
         display: none !important;
     }
 
+    #gallery-2d {
+        padding-top: 150px;
+        /* Increased to accommodate Title + Centered Controls */
+    }
+
     #viewer-controls {
         top: 10px;
         right: 10px;
@@ -470,35 +475,48 @@ button {
     }
 
     #title {
-        font-size: 1.2em;
-        /* Much smaller title */
-        top: 25px;
-        /* Align with buttons */
-        left: 20px;
-        width: auto;
-        max-width: 60%;
-        /* Limit width to avoid hitting right buttons */
-        text-align: left;
+        font-size: 1.3em;
+        /* Slightly larger for a clear header */
+        top: max(15px, env(safe-area-inset-top));
+        /* The very top */
+        left: 0;
+        right: 0;
+        width: 100%;
+        text-align: center;
+        /* Center focus */
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        padding-left: 0;
+        padding: 0 10px;
         pointer-events: none;
-        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+        z-index: 10;
     }
 
-    /* Move global controls slightly tighter */
+    /* Move global controls below the title */
     #top-controls {
-        gap: 8px;
-        top: 15px;
-        right: 15px;
+        gap: 12px;
+        top: calc(max(15px, env(safe-area-inset-top)) + 50px);
+        left: 50%;
+        transform: translateX(-50%);
+        right: auto;
+        width: auto;
+        justify-content: center;
     }
 
+    #home,
     #mode-toggle,
-    #global-fullscreen {
-        font-size: 1.0em;
-        padding: 5px 12px;
-        height: 36px;
+    #global-fullscreen,
+    #toggleSettings {
+        font-size: 1.25em;
+        /* Slightly larger for better emoji visibility */
+        padding: 0 12px;
+        height: 42px;
+        /* A bit taller for better touch target */
+        min-width: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     /* Footer adjustments */
@@ -512,10 +530,6 @@ button {
 
     footer h2 {
         font-size: 0.7em;
-    }
-
-    #home {
-        font-size: 1.8em;
     }
 }
 
@@ -757,6 +771,8 @@ label span:first-child {
 input[type="range"] {
     flex: 2;
     -webkit-appearance: none;
+    appearance: none;
+    /* Added appearance property */
     background: rgba(255, 255, 255, 0.1);
     height: 4px;
     border-radius: 2px;

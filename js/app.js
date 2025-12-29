@@ -41,14 +41,10 @@ class App {
 
         // Initialize Views
         this.view3d = new View3D(document.getElementById('gallery-3d'));
-        this.view3d.init(this.images,
-            (index, openViewer) => this.selectImage(index, openViewer),
-            (index) => this.preloadHighRes(index),
-            this.isDebug // Pass debug flag
-        );
+        // this.view3d.init() is called in loadData after we have images
 
         this.view2d = new View2D(document.getElementById('gallery-2d'));
-        this.view2d.init(this.images, (index) => this.selectImage(index, true), this.isDebug);
+        // this.view2d.init() is called in loadData
 
         // Settings System
         this.settings = new SettingsManager((key, value) => this.applySetting(key, value), this.isMobile);
@@ -704,8 +700,12 @@ class App {
                 zoomBtn.innerText = '🔍';
                 zoomBtn.title = 'Zoom / Magnify';
             }
-            const thumbs = document.getElementById('thumbnail-selector');
-            if (thumbs) thumbs.classList.remove('hidden');
+            if (zoomBtn) {
+                zoomBtn.innerText = '🔍';
+                zoomBtn.title = 'Zoom / Magnify';
+            }
+            // Use existing state for thumbs
+            // if (thumbs) thumbs.classList.remove('hidden');
 
             // Update Thumb Palette
             if (!this.thumbnailsCreated) {
@@ -748,7 +748,7 @@ class App {
             zoomBtn.title = 'Zoom / Magnify';
         }
         const thumbs = document.getElementById('thumbnail-selector');
-        if (thumbs) thumbs.classList.remove('hidden');
+        // if (thumbs) thumbs.classList.remove('hidden');
 
         // --- PREPARE OLD IMAGE FOR EXIT ---
         const oldImg = container.querySelector('img.active');

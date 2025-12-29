@@ -700,8 +700,12 @@ class App {
                 zoomBtn.innerText = '🔍';
                 zoomBtn.title = 'Zoom / Magnify';
             }
-            const thumbs = document.getElementById('thumbnail-selector');
-            if (thumbs) thumbs.classList.remove('hidden');
+            if (zoomBtn) {
+                zoomBtn.innerText = '🔍';
+                zoomBtn.title = 'Zoom / Magnify';
+            }
+            // Use existing state for thumbs
+            // if (thumbs) thumbs.classList.remove('hidden');
 
             // Update Thumb Palette
             if (!this.thumbnailsCreated) {
@@ -744,7 +748,7 @@ class App {
             zoomBtn.title = 'Zoom / Magnify';
         }
         const thumbs = document.getElementById('thumbnail-selector');
-        if (thumbs) thumbs.classList.remove('hidden');
+        // if (thumbs) thumbs.classList.remove('hidden');
 
         // --- PREPARE OLD IMAGE FOR EXIT ---
         const oldImg = container.querySelector('img.active');

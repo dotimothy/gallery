@@ -9,7 +9,7 @@ class App {
         this.currentIndex = 0;
         this.images = [];
         this.metadata = {};
-        this.isMobile = (typeof window.orientation !== "undefined") || (navigator.userAgent.indexOf('IEMobile') !== -1);
+        this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1);
 
         // Debug Flag
         this.isDebug = new URLSearchParams(window.location.search).has('debug');
@@ -94,7 +94,9 @@ class App {
             this.view3d.init(
                 this.images,
                 (index, openViewer) => this.selectImage(index, openViewer), // Original selectImage
-                (index) => this.preloadHighRes(index) // Original preloadHighRes
+                (index) => this.preloadHighRes(index), // Original preloadHighRes
+                this.isMobile,
+                this.isDebug
             );
 
             // 7. Init 2D View
@@ -129,6 +131,7 @@ class App {
                 this.images,
                 (index, openViewer) => this.selectImage(index, openViewer),
                 (index) => this.preloadHighRes(index),
+                this.isMobile,
                 this.isDebug
             );
             this.view2d.init(this.images, (index) => this.selectImage(index, true), this.isDebug);

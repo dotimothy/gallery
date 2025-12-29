@@ -4,16 +4,16 @@ export class SettingsManager {
 
         const desktopDefaults = {
             resolution: 1.0,      // 0.25 - 3.0
-            sphereSpacing: 1.5,   // 1.0 - 15.0
+            sphereSpacing: 2.0,   // 1.0 - 15.0
             particleCount: 50000, // 0 - 50000
             gridColumns: 5        // 1 - 10
         };
 
         const mobileDefaults = {
-            resolution: 0.8,      // Performance
+            resolution: 1.0,      // Performance
             sphereSpacing: 1.0,   // 1.0 - 15.0
-            particleCount: 12500,  // Reduced for mobile GPU
-            gridColumns: 5       // 1 - 10
+            particleCount: 25000,  // Reduced for mobile GPU
+            gridColumns: 2       // 1 - 10
         };
 
         this.defaults = isMobile ? mobileDefaults : desktopDefaults;

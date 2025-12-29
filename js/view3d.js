@@ -30,7 +30,7 @@ export class View3D {
         this.particleCount = 4800;
     }
 
-    init(images, onSelect, onPreload, isDebug = false) {
+    init(images, onSelect, onPreload, isMobile = false, isDebug = false) {
         if (!THREE) {
             console.error("Three.js not loaded");
             return;
@@ -39,6 +39,7 @@ export class View3D {
         this.images = images;
         this.onSelect = onSelect;
         this.onPreload = onPreload;
+        this.isMobile = isMobile;
         this.isDebug = isDebug;
 
         // ... (rest of init) ...
@@ -120,8 +121,13 @@ export class View3D {
             const phi = Math.acos(-1 + (2 * i) / count);
             const theta = Math.sqrt(count * Math.PI) * phi;
 
+            // Fit the layout shape to the device aspect ratio (Ellipsoid/Oval)
+            // On mobile portrait, height is ~2x width. We stretch the "sphere" into an oval.
+            const aspect = window.innerWidth / window.innerHeight;
+            const stretch = aspect < 1 ? (1 / aspect) * 0.8 : 1.0;
+
             const x = this.radius * Math.cos(theta) * Math.sin(phi);
-            const y = this.radius * Math.sin(theta) * Math.sin(phi);
+            const y = this.radius * Math.sin(theta) * Math.sin(phi) * stretch;
             const z = this.radius * Math.cos(phi);
 
             // Material - Start with a Color so we SEE it even if texture fails
@@ -133,13 +139,15 @@ export class View3D {
             const mesh = new THREE.Mesh(geometry, material);
             mesh.position.set(x, y, z);
 
-            // Set initial scale to "Square" placeholders of reasonable size (5x5)
-            // or 5x3.5 to match old default look before load
+            // Set initial scale to placeholders
             mesh.scale.set(5, 3.5, 1);
 
             // Orient: Look AWAY from center
-            vector.copy(mesh.position).multiplyScalar(2);
-            mesh.lookAt(vector);
+            // For an oval, looking exactly away from center keeps images flat to the viewer 
+            // when they are at the center of the viewport.
+            vector.copy(mesh.position);
+            // We want them to point slightly more "outward" but maintain a pleasant curve
+            mesh.lookAt(vector.x * 2, vector.y * 2, vector.z * 2);
 
             mesh.userData = { index: i, originalPos: mesh.position.clone() };
             this.pivot.add(mesh);
@@ -206,12 +214,24 @@ export class View3D {
     getOptimalDistance() {
         const width = window.innerWidth;
         const height = window.innerHeight;
-        const isMobile = width < height;
-        // Scale distance relative to radius
-        // Mobile needs more distance (FOV constraint)
-        // Adjusting multipliers to bring camera closer (Bigger Sphere)
-        const multiplier = isMobile ? 3.0 : 2.5;
-        return this.radius * multiplier;
+        const aspect = width / height;
+
+        // Scientific base: To fit a sphere vertically in 60deg FOV:
+        // dist = radius / tan(30deg) = radius / 0.577 ~= 1.73 * radius.
+        // We use 2.3 as base for comfortable padding.
+        let baseMultiplier = 2.3;
+        let multiplier = baseMultiplier;
+
+        // If in Portrait mode (Aspect < 1), the horizontal width is the constraint.
+        // We must scale the distance by 1/aspect to keep the sphere within sideways bounds.
+        if (aspect < 1) {
+            multiplier = baseMultiplier / aspect;
+        }
+
+        // Add a small extra bump if the detection specifically says it's a mobile device UA
+        if (this.isMobile) multiplier *= 1.1;
+
+        return this.radius * Math.min(7, multiplier);
     }
 
     bindEvents() {

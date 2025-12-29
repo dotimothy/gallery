@@ -17,7 +17,6 @@ export class View3D {
         this.isDragging = false;
         this.previousMouse = { x: 0, y: 0 };
         this.targetRotation = { x: 0, y: 0 };
-        this.targetRotation = { x: 0, y: 0 };
         this.currentRotation = { x: 0, y: 0 };
 
         // Time & Stats
@@ -45,15 +44,18 @@ export class View3D {
         // ... (rest of init) ...
 
         // 1. SETUP RENDERER
-        this.renderer = new THREE.WebGLRenderer({
-            alpha: true,
-            antialias: true,
-            powerPreference: "high-performance"
-        });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap pixel ratio for perf
-        this.container.innerHTML = ''; // Clear container
-        this.container.appendChild(this.renderer.domElement);
+        if (!this.renderer) {
+            this.renderer = new THREE.WebGLRenderer({
+                alpha: true,
+                antialias: true,
+                powerPreference: "high-performance"
+            });
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+            // Use stored resolution setting
+            this.renderer.setPixelRatio(this.resolution || Math.min(window.devicePixelRatio, 2));
+            this.container.innerHTML = ''; // Clear container
+            this.container.appendChild(this.renderer.domElement);
+        }
 
         // 2. SETUP SCENE
         this.scene = new THREE.Scene();
@@ -81,11 +83,17 @@ export class View3D {
         this.createParticles();
 
         // 6. EVENTS
-        this.bindEvents();
+        if (!this.eventsBound) {
+            this.bindEvents();
+            this.eventsBound = true;
+        }
 
         // 7. START LOOP
-        this.animate = this.animate.bind(this);
-        this.animate();
+        if (!this.isAnimating) {
+            this.isAnimating = true;
+            this.animate = this.animate.bind(this);
+            this.animate();
+        }
 
         if (this.isDebug) console.log(`[View3D] Initialized with ${images.length} images.`);
     }
@@ -550,38 +558,41 @@ export class View3D {
         if (this.isDebug) console.log(`[View3D] Update ${key}: ${value}`);
 
         if (key === 'resolution') {
-            // User requested up to 3x (Supersampling)
-            // Warning: High performance cost
-            this.renderer.setPixelRatio(value);
+            this.resolution = value;
+            if (this.renderer) this.renderer.setPixelRatio(value);
         }
 
         if (key === 'sphereSpacing') {
             this.sphereSpacing = value;
-            // Re-create frames to adjust radius
-            // We need to clear old frames first
-            this.frames.forEach(f => {
-                this.pivot.remove(f);
-                if (f.geometry) f.geometry.dispose();
-                if (f.material) {
-                    if (f.material.map) f.material.map.dispose();
-                    f.material.dispose();
-                }
-            });
-            this.frames = [];
-            this.createFrames();
+            if (this.pivot) {
+                // Re-create frames to adjust radius
+                // We need to clear old frames first
+                this.frames.forEach(f => {
+                    this.pivot.remove(f);
+                    if (f.geometry) f.geometry.dispose();
+                    if (f.material) {
+                        if (f.material.map) f.material.map.dispose();
+                        f.material.dispose();
+                    }
+                });
+                this.frames = [];
+                this.createFrames();
+            }
         }
 
         if (key === 'particleCount') {
             this.particleCount = value;
-            if (this.particleGroup) {
-                this.scene.remove(this.particleGroup);
-                this.particleGroup.traverse(c => {
-                    if (c.geometry) c.geometry.dispose();
-                    if (c.material) c.material.dispose();
-                });
-                this.particleGroup = null;
+            if (this.scene) {
+                if (this.particleGroup) {
+                    this.scene.remove(this.particleGroup);
+                    this.particleGroup.traverse(c => {
+                        if (c.geometry) c.geometry.dispose();
+                        if (c.material) c.material.dispose();
+                    });
+                    this.particleGroup = null;
+                }
+                this.createParticles();
             }
-            this.createParticles();
         }
     }
 

@@ -28,9 +28,14 @@ export class View3D {
         // Settings State
         this.sphereSpacing = 6.0;
         this.particleCount = 4800;
+
+        // Rendering Control
+        this.isPaused = false;
+        this.animationId = null;
     }
 
-    init(images, onSelect, onPreload, isMobile = false, isDebug = false) {
+    init(images, onSelect, onPreload, isMobile = false, isDebug = false, onMagnify = null) {
+        this.onMagnify = onMagnify;
         if (!THREE) {
             console.error("Three.js not loaded");
             return;
@@ -234,30 +239,90 @@ export class View3D {
         return this.radius * Math.min(7, multiplier);
     }
 
+    getResponsiveLineDistance(index) {
+        if (!this.frames[index]) return 6; // Fallback
+
+        // 1. Get Image dimensions in World Space
+        const mesh = this.frames[index];
+        const imgWidth = mesh.scale.x;
+        // height is always 5 based on loader logic
+
+        // 2. Camera params
+        // Vertical FOV in radians
+        const vFOV = (this.camera.fov * Math.PI) / 180;
+
+        // 3. Calculate distance to fit WIDTH
+        // FrustumWidth = 2 * dist * tan(vFOV/2) * aspect
+        // We want FrustumWidth >= imgWidth
+        // dist = imgWidth / (2 * tan(vFOV/2) * aspect)
+
+        // Add minimal padding (1.1x) to avoid edge touching
+        const padding = 1.1;
+        const requiredDistForWidth = (imgWidth * padding) / (2 * Math.tan(vFOV / 2) * this.camera.aspect);
+
+        // 4. Calculate distance to fit HEIGHT (just in case)
+        // FrustumHeight = 2 * dist * tan(vFOV/2)
+        // dist = imgHeight / (2 * tan(vFOV/2))
+        const requiredDistForHeight = (mesh.scale.y * padding) / (2 * Math.tan(vFOV / 2));
+
+        // 5. Use the max distance to ensure BOTH fit (Contain logic)
+        // User specifically asked for "width fits", which usually implies ensuring width is visible.
+        // If we strictly follow "width fits", we might cut off height on very wide screens?
+        // No, standard "contain" uses max distance.
+        // Let's stick to "Contain" which satisfies "width fits" implicitly.
+
+        // However, if the user meant "Cover" (zoom until width fills, potentially cropping height)?
+        // "width of the image fits on the users scren" -> "Width matches Screen Width"
+        // This is exactly `requiredDistForWidth`.
+
+        // Let's use `requiredDistForWidth` as the primary driver, 
+        // but clamped to a reasonable minimum (don't go too close than 5).
+        return Math.max(5, requiredDistForWidth);
+    }
+
     bindEvents() {
+        const threshold = this.isMobile ? 12 : 5; // Higher threshold for mobile
+        let startPos = { x: 0, y: 0 };
+        let totalDist = 0;
+
         const onDown = (x, y) => {
-            if (this.layout === 'LINE') return; // Disable drag rotation in Line mode for now
-            this.isDragging = true;
+            if (this.layout === 'LINE') return;
+            this.isPressed = true;
+            this.isDragging = false;
+            startPos = { x, y };
             this.previousMouse = { x, y };
+            totalDist = 0;
         };
 
         const onMove = (x, y) => {
-            if (this.isDragging) {
+            if (this.isPressed) {
                 const deltaX = x - this.previousMouse.x;
                 const deltaY = y - this.previousMouse.y;
 
-                this.targetRotation.y += deltaX * 0.005;
-                this.targetRotation.x += deltaY * 0.005;
+                totalDist += Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+                // Only start rotating if we've moved enough (prevents tap jitter)
+                if (totalDist > threshold) {
+                    this.isDragging = true;
+                }
+
+                if (this.isDragging) {
+                    // Reduce sensitivity significantly on mobile
+                    const speed = this.isMobile ? 0.002 : 0.004;
+                    this.targetRotation.y += deltaX * speed;
+                    this.targetRotation.x += deltaY * speed;
+                }
 
                 this.previousMouse = { x, y };
             }
         };
 
         const onUp = () => {
-            if (this.isDragging) {
+            this.isPressed = false;
+            // Delay resetting isDragging so the 'click' event can still catch it
+            setTimeout(() => {
                 this.isDragging = false;
-                // Add subtle throw/inertia stop here if desired later
-            }
+            }, 50);
             this.previousPinchDist = 0; // Reset pinch
         };
 
@@ -265,20 +330,30 @@ export class View3D {
         const handleZoom = (delta) => {
             if (this.isZoomedIn) return; // Don't interfere with transition
 
+            // Auto-Magnify Logic
+            // If delta < 0 (zooming in) and we are already near minZ in LINE layout
+            if (this.layout === 'LINE' && delta < 0 && this.onMagnify) {
+                const responsiveDist = this.getResponsiveLineDistance(this.currentIndex);
+                // Trigger magnifier when we get very close
+                if (this.camera.position.z < responsiveDist * 1.02) {
+                    this.onMagnify();
+                    return;
+                }
+            }
+
             const zoomSpeed = 0.5;
             let newZ = this.camera.position.z + delta * zoomSpeed;
 
             // Clamp Zoom
             // In LINE layout, allow getting much closer
-            const minZ = this.layout === 'LINE' ? 5 : this.radius * 1.5; // Don't go inside sphere
+            const responsiveDist = this.getResponsiveLineDistance(this.currentIndex);
+            const minZ = this.layout === 'LINE' ? responsiveDist * 0.9 : this.radius * 1.5;
             const maxZ = this.getOptimalDistance() * 2; // Allow backing out 2x default
 
             newZ = Math.max(minZ, Math.min(newZ, maxZ));
 
             this.camera.position.z = newZ;
             // Update baseDistance so resize doesn't snap it back immediately
-            // But actually we might want resize to respect this new manual distance?
-            // For now, let's update baseDistance = newZ so it persists.
             this.baseDistance = newZ;
         };
 
@@ -304,7 +379,8 @@ export class View3D {
                 const dx = e.touches[0].clientX - e.touches[1].clientX;
                 const dy = e.touches[0].clientY - e.touches[1].clientY;
                 this.previousPinchDist = Math.sqrt(dx * dx + dy * dy);
-                this.isDragging = false; // Pinch overrides drag
+                this.isPressed = false; // Pinch overrides drag
+                this.isDragging = false;
             }
         }, { passive: false });
 
@@ -320,7 +396,7 @@ export class View3D {
                 if (this.previousPinchDist > 0) {
                     const delta = this.previousPinchDist - dist; // + means pinching IN (shrinking fingers) -> Zoom OUT (camera Z increase)
                     // Sensitivity
-                    handleZoom(delta * 0.5);
+                    handleZoom(delta * 0.2); // Reduced from 0.5 for smoother mobile experience
                 }
                 this.previousPinchDist = dist;
             }
@@ -416,7 +492,7 @@ export class View3D {
         gsap.to(this.pivot.rotation, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.out" });
 
         // 2. Animate Camera to a good viewing distance for simple line
-        const lineDist = 15; // Tighter focus on single image (was 30)
+        const lineDist = this.getResponsiveLineDistance(targetIndex);
         gsap.to(this.camera.position, { z: lineDist, duration: 0.8, ease: "power2.out" });
 
         // 3. Move all frames to Line positions
@@ -513,6 +589,8 @@ export class View3D {
     }
 
     animate() {
+        if (this.isPaused) return;
+
         // Time
         const dt = this.clock.getDelta();
         const time = this.clock.elapsedTime;
@@ -530,8 +608,9 @@ export class View3D {
         // Only apply in SPHERE mode.
         if (this.layout !== 'LINE') {
             // Lerp factor independent of framerate: 1 - exp(-speed * dt)
-            // Speed factor ~10.0 gives similar feel to original 0.1 at 60fps
-            const smoothFactor = 1.0 - Math.exp(-10.0 * dt);
+            // Increased damping for mobile (lower speed factor)
+            const speedFactor = this.isMobile ? 6.0 : 10.0;
+            const smoothFactor = 1.0 - Math.exp(-speedFactor * dt);
 
             this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * smoothFactor;
             this.currentRotation.y += (this.targetRotation.y - this.currentRotation.y) * smoothFactor;
@@ -554,7 +633,24 @@ export class View3D {
         }
 
         this.renderer.render(this.scene, this.camera);
-        requestAnimationFrame(this.animate);
+        this.animationId = requestAnimationFrame(() => this.animate());
+    }
+
+    pauseRendering() {
+        this.isPaused = true;
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+        console.log('[View3D] Rendering paused');
+    }
+
+    resumeRendering() {
+        if (!this.isPaused) return;
+        this.isPaused = false;
+        this.clock.getDelta(); // Reset delta to avoid huge jump
+        this.animate();
+        console.log('[View3D] Rendering resumed');
     }
 
     resize() {
@@ -569,7 +665,11 @@ export class View3D {
         // Recalculate based on current dynamic radius
         this.baseDistance = this.getOptimalDistance();
 
-        if (!this.isZoomedIn) {
+        if (this.layout === 'LINE' && this.frames[this.currentIndex]) {
+            // In line mode, resize should update distance to maintain "fit"
+            const dist = this.getResponsiveLineDistance(this.currentIndex);
+            this.camera.position.z = dist;
+        } else if (!this.isZoomedIn) {
             this.camera.position.z = this.baseDistance;
         }
     }

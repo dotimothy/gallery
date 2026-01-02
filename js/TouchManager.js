@@ -109,22 +109,62 @@ export class TouchManager {
         if (this.touches.current.length === 2 && prevTouches.length === 2) {
             this.handlePinch(prevTouches);
         } else if (this.touches.current.length === 1 && prevTouches.length === 1) {
+            this.handleSingleTouch(prevTouches);
+        }
+    }
+
+    handleSingleTouch(prevTouches) {
+        const current = this.touches.current[0];
+        const start = this.touches.start[0];
+        const prev = prevTouches[0];
+
+        const totalX = current.x - start.x;
+        const totalY = current.y - start.y;
+        const deltaX = current.x - prev.x;
+        const deltaY = current.y - prev.y;
+
+        // 1. Determine if this is a vertical Pull-Down to dismiss
+        // We trigger this if the movement is primarily downward and we aren't already panning
+        if (!this.isPanning && totalY > this.panThreshold && Math.abs(totalY) > Math.abs(totalX)) {
+            this.isPullingDown = true;
+            if (this.gestures.onPullDown) {
+                this.gestures.onPullDown(totalY, 'move');
+            }
+        }
+        // 2. Otherwise, treat it as a standard Pan (for moving zoomed images)
+        else if (!this.isPullingDown && (Math.abs(totalX) > this.panThreshold || Math.abs(totalY) > this.panThreshold)) {
+            if (!this.isPanning) {
+                this.isPanning = true;
+                if (this.gestures.onPan) this.gestures.onPan(0, 0, 'start');
+            }
+            if (this.gestures.onPan) {
+                this.gestures.onPan(deltaX, deltaY, 'move');
+            }
         }
     }
     handlePinch(prevTouches) {
         if (this.touches.start.length < 2 || !this.initialPinchDist) return;
 
+        // Calculate distance in the PREVIOUS frame
+        const prevDist = this.getDistance(prevTouches[0], prevTouches[1]);
+
+        // Calculate distance in the CURRENT frame
         const currentDist = this.getDistance(
             this.touches.current[0],
             this.touches.current[1]
         );
 
-        const scale = currentDist / this.initialPinchDist;
+        // Calculate scale relative to the previous frame (The Delta)
+        const frameScale = currentDist / prevDist;
+
+        // Calculate the total cumulative scale relative to the start
+        const totalScale = currentDist / this.initialPinchDist;
 
         if (this.gestures.onPinch) {
-            this.gestures.onPinch(scale, {
+            this.gestures.onPinch(totalScale, {
                 enterThreshold: this.pinchHysteresis.enterThreshold,
-                exitThreshold: this.pinchHysteresis.exitThreshold
+                exitThreshold: this.pinchHysteresis.exitThreshold,
+                frameScale: frameScale // <--- Pass this to app.js
             });
         }
     }

@@ -108,6 +108,10 @@ class App {
             // Hide arrows in magnifier
             this.ui.leftArrow.hidden = true;
             this.ui.rightArrow.hidden = true;
+
+            // FIX: Hide Thumbnails in Magnifier Mode
+            const thumbs = document.getElementById('thumbnail-selector');
+            if (thumbs) thumbs.classList.add('hidden');
         });
 
         // DETAIL -> PREVIEW: Exit magnifier
@@ -129,10 +133,14 @@ class App {
                     zoomBtn.title = 'Zoom / Magnify';
                 }
 
-                // Restore arrows if not in slideshow
+                // Restore arrows AND thumbnails if not in slideshow
                 if (!this.isSlideshowActive) {
                     this.ui.leftArrow.hidden = false;
                     this.ui.rightArrow.hidden = false;
+
+                    // FIX: Restore Thumbnails
+                    const thumbs = document.getElementById('thumbnail-selector');
+                    if (thumbs) thumbs.classList.remove('hidden');
                 }
             }
         });
@@ -612,6 +620,10 @@ class App {
 
     // Updated selectImage to calculate direction
     selectImage(index, openViewer = false, direction = 0) {
+        if (this.mode === '3D' && this.viewState.getState() === 'detail') {
+            this.viewState.transition('preview');
+        }
+
         this.log(`selectImage Idx:${index} Open:${openViewer}`);
         if (index < 0 || index >= this.images.length) return;
 
@@ -829,7 +841,6 @@ class App {
         this.ui.metadataViewer.classList.toggle('visible');
     }
 
-    // --- Viewer Logic ---
     openFullscreenViewer(index, direction = 0) {
         // Cancel any pending close animation to prevent race conditions
         if (this.viewerCloseTimer) {
@@ -845,6 +856,8 @@ class App {
         }
 
         const imgName = this.images[index];
+        // Note: 'dir' (thumbs/fulls) is unused here as mountActiveImage defaults to fulls, 
+        // but keeping variable definition to match original structure logic.
         const dir = this.useDataSaver ? 'thumbs' : 'fulls';
 
         // 1. Manage Metadata Button
@@ -861,25 +874,29 @@ class App {
         if (this.ui.topControls) this.ui.topControls.style.opacity = '0';
         if (this.ui.topControls) this.ui.topControls.style.pointerEvents = 'none';
 
-        // Hide Title to prevent overlap on mobile (and cleaner look generally)
+        // Hide Title to prevent overlap
         if (this.ui.title) this.ui.title.style.opacity = '0';
 
         const container = this.ui.fullImageContainer;
 
         // --- 3D MODE: SPECIAL CAROUSEL VIEW ---
         if (this.mode === '3D') {
-            // We do NOT create a DOM image. We use the 3D scene.
-            // Ensure container is empty (remove any leftover 2D images)
-            container.innerHTML = '';
+            // FIX 1: If in Magnifier (Detail) mode, update DOM image instead of clearing it
+            if (this.viewState.getState() === 'detail') {
+                this.mountActiveImage(index, direction);
+            } else {
+                // Standard Preview: Clear DOM to let 3D Canvas show through
+                container.innerHTML = '';
+            }
 
             // Trigger 3D Transition
             this.view3d.enterLineView(index);
 
-            // Show UI Overlays (Metadata, Controls)
+            // Show UI Overlays
             this.updateMetadata(index);
             this.ui.imageViewer.hidden = false;
             this.ui.imageViewer.classList.add('visible');
-            this.ui.imageViewer.classList.add('transparent'); // IMPORTANT: No black bg
+            this.ui.imageViewer.classList.add('transparent');
 
             // Show Arrows (Only if not slideshow)
             if (!this.isSlideshowActive) {
@@ -890,18 +907,16 @@ class App {
                 this.ui.rightArrow.hidden = true;
             }
 
-            // RESET UI STATE (Fix for navigation from Magnified state)
+            // RESET UI STATE
             const zoomBtn = document.getElementById('zoomBtn');
-            if (zoomBtn) {
+            // If in detail mode, ensure button shows "Back"
+            if (this.viewState.getState() === 'detail' && zoomBtn) {
+                zoomBtn.innerText = '🔙';
+                zoomBtn.title = 'Return to Preview';
+            } else if (zoomBtn) {
                 zoomBtn.innerText = '🔍';
                 zoomBtn.title = 'Zoom / Magnify';
             }
-            if (zoomBtn) {
-                zoomBtn.innerText = '🔍';
-                zoomBtn.title = 'Zoom / Magnify';
-            }
-            // Use existing state for thumbs
-            // if (thumbs) thumbs.classList.remove('hidden');
 
             // Update Thumb Palette
             if (!this.thumbnailsCreated) {
@@ -910,19 +925,19 @@ class App {
             }
             this.updateThumbSelector(index);
 
-            // Toggle Thumbs visibility for slideshow at default
-            // Toggle Thumbs visibility for slideshow at default
             const thumbs = document.getElementById('thumbnail-selector');
-            if (thumbs) {
-                if (this.isSlideshowActive) thumbs.classList.add('hidden');
+            if (thumbs && this.isSlideshowActive) {
+                thumbs.classList.add('hidden');
             }
-            return;
             return;
         }
 
         // --- 2D MODE: STANDARD DOM VIEWER ---
-        this.ui.imageViewer.hidden = false; // Fixed: Ensure hidden is removed so selectImage tracks visibility
+        this.ui.imageViewer.hidden = false;
         this.ui.imageViewer.classList.remove('transparent'); // Ensure black bg for 2D
+
+        // FIX 2: Explicitly show the container. It is hidden by default in the "Explore" hook cleanup.
+        this.ui.fullImageContainer.style.display = 'flex';
 
         // Show Arrows for navigation (Only if not slideshow)
         if (!this.isSlideshowActive) {
@@ -935,13 +950,6 @@ class App {
 
         this.mountActiveImage(index, direction);
 
-        // Show Arrows for navigation
-        if (!this.isSlideshowActive) {
-            this.ui.leftArrow.hidden = false;
-            this.ui.rightArrow.hidden = false;
-        }
-
-        // Toggle Thumbs visibility for slideshow
         // Toggle Thumbs visibility for slideshow
         const thumbs = document.getElementById('thumbnail-selector');
         if (thumbs) {
@@ -959,154 +967,154 @@ class App {
         const imgName = this.images[index];
         const container = this.ui.fullImageContainer;
 
-        // RESET UI STATE (Fix for navigation while zoomed)
+        // --- 1. CLEANUP & UI RESET ---
         const zoomBtn = document.getElementById('zoomBtn');
         if (zoomBtn) {
             zoomBtn.innerText = '🔍';
-            zoomBtn.title = 'Zoom / Magnify';
+            zoomBtn.title = 'Use Scroll Wheel or Pinch to Zoom';
         }
-        const thumbs = document.getElementById('thumbnail-selector');
-        // if (thumbs) thumbs.classList.remove('hidden');
 
-        // --- PREPARE OLD IMAGE FOR EXIT ---
         const oldImg = container.querySelector('img.active');
+        const oldOverlay = container.querySelector('.input-overlay');
+
+        if (oldOverlay) oldOverlay.remove();
+
+        // Handle Old Image Exit
         if (oldImg) {
             oldImg.classList.remove('active');
-            oldImg.style.zIndex = '0'; // Move behind
+            oldImg.style.zIndex = '0';
 
-            // Slide Animation Logic
             if (direction !== 0) {
-                // If moving NEXT (dir=1), old image slides LEFT (-100%)
-                // If moving PREV (dir=-1), old image slides RIGHT (100%)
                 const exitX = direction > 0 ? '-100%' : '100%';
                 oldImg.style.transition = 'transform 0.4s ease-in-out, opacity 0.4s ease';
-                oldImg.style.transform = `translate(${exitX}, 0)`;
+                oldImg.style.transform = `translate(${exitX}, 0) scale(1)`;
                 oldImg.style.opacity = '0.5';
             } else {
-                // Initial open or jump: Fade out
                 oldImg.style.opacity = 0;
             }
-
             setTimeout(() => { if (oldImg.parentElement) oldImg.remove(); }, 500);
         }
 
-        // --- Zoom / Pan Variables ---
-        // Resets freshly for the new image
+        // --- 2. SETUP NEW VISUALS ---
+        const newImg = document.createElement('img');
+        newImg.className = 'active';
+
+        Object.assign(newImg.style, {
+            opacity: '0',
+            position: 'absolute',
+            maxWidth: '100%',
+            maxHeight: '100%',
+            width: 'auto',
+            height: 'auto',
+            objectFit: 'contain',
+            transformOrigin: 'center center',
+            zIndex: '10',
+            pointerEvents: 'none',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            transition: 'none'
+        });
+
+        if (direction !== 0) {
+            const enterX = direction > 0 ? '100%' : '-100%';
+            newImg.style.transform = `translate(${enterX}, 0) scale(1)`;
+        } else {
+            newImg.style.transform = 'translate(0, 0) scale(1)';
+        }
+
+        // --- 3. SETUP INPUT OVERLAY ---
+        const overlay = document.createElement('div');
+        overlay.className = 'input-overlay';
+        Object.assign(overlay.style, {
+            position: 'absolute',
+            top: '0',
+            left: '0',
+            width: '100%',
+            height: '100%',
+            zIndex: '20',
+            cursor: 'default',
+            touchAction: 'none'
+        });
+
+        // --- 4. STATE VARIABLES ---
         let zoomLevel = 1;
         let pannedX = 0;
         let pannedY = 0;
         let isDragging = false;
-        let startX = 0;
-        let startY = 0;
+        let startX = 0, startY = 0;
 
-        // Create New Image
-        const newImg = document.createElement('img');
-        newImg.style.opacity = '0';
-        newImg.style.position = 'absolute';
-        newImg.style.maxWidth = '95%';
-        newImg.style.maxHeight = '95%';
-        newImg.style.objectFit = 'contain';
-        newImg.style.transformOrigin = 'center center';
-        newImg.style.zIndex = '10'; // Above old image
-        newImg.src = `./fulls/${imgName}.jpg`;
-        newImg.className = 'active';
+        // --- 5. TRANSFORM LOGIC ---
+        const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
 
-        // Initial Position for Slide
-        if (direction !== 0) {
-            // If moving NEXT (dir=1), new comes from RIGHT (100%)
-            // If moving PREV (dir=-1), new comes from LEFT (-100%)
-            const enterX = direction > 0 ? '100%' : '-100%';
-            newImg.style.transform = `translate(${enterX}, 0) scale(1)`;
-            // Wait for mount to transition to 0
-        } else {
-            // Center default
-            newImg.style.transform = 'translate(0, 0) scale(1)';
-        }
+        const updateTransform = (animate = false) => {
+            if (animate) {
+                newImg.style.transition = 'transform 0.3s cubic-bezier(0.1, 0.57, 0.1, 1)';
+            } else {
+                newImg.style.transition = 'none';
+            }
 
-        // Transition settings:
-        // We need explicit transition for the slide (transform) and fade (opacity)
-        newImg.style.transition = 'transform 0.4s ease-out, opacity 0.4s ease';
+            const currentW = newImg.offsetWidth * zoomLevel;
+            const currentH = newImg.offsetHeight * zoomLevel;
+            const screenW = container.offsetWidth;
+            const screenH = container.offsetHeight;
 
-        // Helper to update transform during Zoom/Pan
-        const updateTransform = () => {
-            // When panning, we want INSTANT response, so we might disable transition temporarily in events
+            const maxX = currentW > screenW ? (currentW - screenW) / 2 : 0;
+            const maxY = currentH > screenH ? (currentH - screenH) / 2 : 0;
+
+            pannedX = clamp(pannedX, -maxX, maxX);
+            pannedY = clamp(pannedY, -maxY, maxY);
+
             newImg.style.transform = `translate(${pannedX}px, ${pannedY}px) scale(${zoomLevel})`;
 
             if (zoomLevel > 1) {
-                newImg.style.cursor = 'grab';
+                overlay.style.cursor = isDragging ? 'grabbing' : 'grab';
             } else {
-                newImg.style.cursor = 'default';
+                overlay.style.cursor = 'default';
+            }
+        };
+
+        // --- FIX: DEFINE TOGGLE ZOOM HANDLER ---
+        // This attaches the internal state (zoomLevel) to the container so the button can use it
+        container.toggleZoom = () => {
+            if (zoomLevel > 1) {
+                // Reset to 1x
+                zoomLevel = 1;
                 pannedX = 0;
                 pannedY = 0;
-            }
-        };
-
-        // Exposed Toggle Function for External Control (Magnifier Button)
-        container.toggleZoom = () => {
-            let isZoomed = false;
-            if (zoomLevel > 1) {
-                zoomLevel = 1;
-                isZoomed = false;
+                updateTransform(true);
+                return false; // isZoomed = false
             } else {
-                zoomLevel = 3.0; // Max zoom for magnifier
-                isZoomed = true;
+                // Zoom In to 2.5x
+                zoomLevel = 2.5;
+                updateTransform(true);
+                return true; // isZoomed = true
             }
-            pannedX = 0;
-            pannedY = 0;
-            // Ensure transition is active for the zoom
-            newImg.style.transition = 'transform 0.3s ease-in-out';
-            updateTransform();
-            return isZoomed;
         };
 
-        // Expose state helper
         container.isZoomed = () => zoomLevel > 1;
 
-        // Event Listeners
-        container.onwheel = (e) => {
-            e.preventDefault();
-            const delta = -Math.sign(e.deltaY) * 0.25;
-            const nextZoom = Math.min(Math.max(1, zoomLevel + delta), 4);
 
-            // Auto-Exit Logic (User requested: "zoom out to exit magnifier")
-            // If we are at 1x and try to zoom out (delta < 0, scroll down)
-            if (this.mode === '3D' && zoomLevel <= 1 && delta < 0) {
-                this.toggleMagnifier();
-                return;
-            }
+        // --- 6. EVENT LISTENERS (On Overlay) ---
+        overlay.onwheel = (e) => {
+            e.preventDefault();
+            const delta = -Math.sign(e.deltaY) * 0.2;
+            const nextZoom = Math.min(Math.max(1, zoomLevel + delta), 5);
 
             if (nextZoom !== zoomLevel) {
                 zoomLevel = nextZoom;
                 if (zoomLevel === 1) { pannedX = 0; pannedY = 0; }
-                newImg.style.transition = 'transform 0.1s linear'; // Smooth zoom
-                updateTransform();
+                updateTransform(false);
             }
         };
 
-        // Single Click to Toggle Zoom (Enhanced UX for mobile/touch)
-        // User requested: "don't have to double tap to enable tap and zoom"
-        container.onclick = (e) => {
-            // If we are already zoomed, we want dragging to work, but a quick tap resets?
-            // Actually, if they are zoomed, dragging is handled by pointerdown/move.
-            // If they just CLICK (down then up without much move), toggle zoom.
-            if (zoomLevel > 1) {
-                // Return to 1x
-                zoomLevel = 1;
-                pannedX = 0;
-                pannedY = 0;
-            } else {
-                // Zoom to 3x center
-                zoomLevel = 3.0;
-                pannedX = 0;
-                pannedY = 0;
-            }
-            newImg.style.transition = 'transform 0.3s ease-in-out';
-            updateTransform();
+        overlay.ondblclick = (e) => {
+            e.preventDefault();
+            // Manually trigger the toggle and update UI button state if needed
+            const isNowZoomed = container.toggleZoom();
 
-            // Sync Toggle Zoom Button UI
-            const zoomBtn = document.getElementById('zoomBtn');
+            // Optional: Sync the Zoom Button UI immediately
             if (zoomBtn) {
-                if (zoomLevel > 1) {
+                if (isNowZoomed) {
                     zoomBtn.innerText = '🔙';
                     zoomBtn.title = "Reset Zoom";
                 } else {
@@ -1116,160 +1124,95 @@ class App {
             }
         };
 
-        container.ondblclick = (e) => {
-            // Already handled by single click now for faster mobile access
-        };
-
-        container.onpointerdown = (e) => {
+        overlay.onpointerdown = (e) => {
+            if (e.pointerType === 'touch') return;
             if (zoomLevel <= 1) return;
+
+            e.preventDefault();
             isDragging = true;
             startX = e.clientX - pannedX;
             startY = e.clientY - pannedY;
-            newImg.style.cursor = 'grabbing';
-            newImg.style.transition = 'none'; // IMPORTANT: Instant drag
-            container.setPointerCapture(e.pointerId);
+            overlay.setPointerCapture(e.pointerId);
+            updateTransform(false);
         };
 
-        // === TOUCH MANAGER INTEGRATION ===
-        const touchManager = new TouchManager(container);
+        overlay.onpointermove = (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            pannedX = e.clientX - startX;
+            pannedY = e.clientY - startY;
+            updateTransform(false);
+        };
 
-        let lastIncX = 0;
-        let lastIncY = 0;
-        let panInertia = null;
+        overlay.onpointerup = (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            overlay.releasePointerCapture(e.pointerId);
+            updateTransform(true);
+        };
 
-        // Configure hysteresis for smooth transitions
-        touchManager.setHysteresis(1.15, 1.03);
+        // Touch Manager
+        const touchManager = new TouchManager(overlay);
+        touchManager.setHysteresis(1.05, 0.98);
 
-        // Register Pinch Gesture: Handle zoom with state transitions
         touchManager.registerGesture('onPinch', (scale, thresholds) => {
             const currentState = this.viewState.getState();
-
-            if (panInertia) { panInertia.kill(); panInertia = null; }
-
-            // State-based pinch handling
-            if (this.mode === '3D') {
-                if (currentState === 'preview' && scale > thresholds.enterThreshold) {
-                    this.viewState.transition('detail');
-                } else if (currentState === 'detail' && scale < thresholds.exitThreshold) {
-                    this.viewState.transition('preview');
-                }
+            if (this.mode === '3D' && currentState === 'preview' && scale > thresholds.enterThreshold) {
+                this.viewState.transition('detail');
             }
 
-            // Apply zoom transform
-            if (currentState === 'detail' || this.mode === '2D') {
-                const scaleFactor = (scale - 1) * 0.5;
-                const nextZoom = Math.min(Math.max(1, zoomLevel + scaleFactor), 4);
+            if (currentState === 'detail' || this.mode === '2D' || currentState === 'preview') {
+                // NEW LOGIC: Use the frame-to-frame scale for smoother movement
+                const frameScale = thresholds.frameScale || 1;
+
+                // Sensitivity of 1.0 makes it 1:1 with finger movement
+                const sensitivity = 1.0;
+                const delta = (frameScale - 1) * sensitivity;
+
+                let nextZoom = zoomLevel + delta;
+                nextZoom = Math.min(Math.max(1, nextZoom), 5);
 
                 if (nextZoom !== zoomLevel) {
                     zoomLevel = nextZoom;
+                    // Reset panning if we are back at 1x zoom
                     if (zoomLevel === 1) { pannedX = 0; pannedY = 0; }
-                    newImg.style.transition = 'none';
-                    updateTransform();
+                    updateTransform(false);
                 }
             }
         });
 
-        // Register Pan Gesture: Move zoomed image with momentum
         touchManager.registerGesture('onPan', (incX, incY, state) => {
             if (zoomLevel <= 1) return;
-
             if (state === 'start') {
-                if (panInertia) { panInertia.kill(); panInertia = null; }
                 newImg.style.transition = 'none';
             } else if (state === 'move') {
                 pannedX += incX;
                 pannedY += incY;
-                lastIncX = incX;
-                lastIncY = incY;
-                updateTransform();
+                updateTransform(false);
             } else if (state === 'end') {
-                // Momentum Panning using GSAP
-                const velocityX = lastIncX * 10;
-                const velocityY = lastIncY * 10;
-
-                panInertia = gsap.to({ x: pannedX, y: pannedY }, {
-                    x: pannedX + velocityX,
-                    y: pannedY + velocityY,
-                    duration: 0.8,
-                    ease: "power2.out",
-                    onUpdate: function () {
-                        pannedX = this.targets()[0].x;
-                        pannedY = this.targets()[0].y;
-                        updateTransform();
-                    }
-                });
+                updateTransform(true);
             }
         });
 
-        // Register Pull-Down Gesture: Dismiss viewer
         touchManager.registerGesture('onPullDown', (totalY, state) => {
             if (zoomLevel > 1) return;
-
-            if (state === 'start' || state === 'move') {
-                // Visual feedback: slide down and scale slightly
+            if (state === 'move') {
                 const progress = Math.min(totalY / 300, 1);
                 const scale = 1 - (progress * 0.15);
-                const opacity = 1 - (progress * 0.5);
-
-                newImg.style.transition = 'none';
                 newImg.style.transform = `translate(0, ${totalY * 0.5}px) scale(${scale})`;
-                newImg.style.opacity = opacity;
                 container.style.backgroundColor = `rgba(0,0,0,${0.9 * (1 - progress)})`;
             } else if (state === 'end') {
                 if (totalY > 120) {
-                    // Trigger dismissal
                     this.viewState.transition('explore');
                 } else {
-                    // Snap back
-                    gsap.to(newImg, {
-                        y: 0,
-                        scale: 1,
-                        opacity: 1,
-                        duration: 0.3,
-                        ease: "back.out(1.7)",
-                        onUpdate: () => {
-                            // Extract values from GSAP or just hardcode if simple
-                        },
-                        onComplete: () => {
-                            newImg.style.transform = 'translate(0,0) scale(1)';
-                            container.style.backgroundColor = '';
-                        }
-                    });
-                    gsap.to(container, {
-                        backgroundColor: 'rgba(0,0,0,0.9)',
-                        duration: 0.3
-                    });
+                    newImg.style.transition = 'transform 0.3s ease-out';
+                    newImg.style.transform = 'translate(0,0) scale(1)';
+                    container.style.backgroundColor = 'rgba(0,0,0,0.9)';
                 }
             }
         });
 
-        touchManager.registerGesture('onTap', (touch) => {
-            // Let onclick handle it
-        });
-
-        container.addEventListener('touchend', () => {
-            // Cleanup handled by TouchManager
-        });
-
-        container.onpointermove = (e) => {
-            if (!isDragging) return;
-            pannedX = e.clientX - startX;
-            pannedY = e.clientY - startY;
-            newImg.style.transform = `translate(${pannedX}px, ${pannedY}px) scale(${zoomLevel})`;
-        };
-
-        container.onpointerup = (e) => {
-            if (!isDragging) return;
-            isDragging = false;
-            newImg.style.cursor = 'grab';
-            newImg.style.transition = 'transform 0.1s linear';
-            container.releasePointerCapture(e.pointerId);
-        };
-
-        // Ensure touch-action is none to allow pure JS handling
-        container.style.touchAction = 'none';
-
-        // Loader
+        // --- 7. LOAD HANDLING ---
         let loader = null;
         const loaderTimeout = setTimeout(() => {
             loader = document.createElement('div');
@@ -1279,16 +1222,16 @@ class App {
 
         newImg.onload = () => {
             clearTimeout(loaderTimeout);
+            if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
 
-            // Trigger Entry Animation
+            newImg.getBoundingClientRect();
+
             requestAnimationFrame(() => {
+                newImg.style.transition = 'transform 0.4s ease-out, opacity 0.4s ease';
                 newImg.style.opacity = '1';
                 newImg.style.transform = 'translate(0, 0) scale(1)';
             });
 
-            if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
-
-            // Update Palette UI
             if (!this.thumbnailsCreated) {
                 this.createThumbSelector();
                 this.thumbnailsCreated = true;
@@ -1296,13 +1239,12 @@ class App {
             this.updateThumbSelector(index);
         };
 
-        newImg.onerror = () => {
-            clearTimeout(loaderTimeout);
-            if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
-        };
-
+        // --- 8. MOUNT & SET SRC ---
         container.appendChild(newImg);
+        container.appendChild(overlay);
+        newImg.src = `./fulls/${imgName}.jpg`;
     }
+
 
     toggleMagnifier() {
         this.log(`toggleMagnifier called. Current state: ${this.viewState.getState()}`);

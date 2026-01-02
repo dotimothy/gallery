@@ -307,6 +307,7 @@ button {
     /* Prevent dragging outside */
     touch-action: none;
     /* Disable browser zoom/scroll handling */
+    display: none;
 }
 
 #full-image-container img {
@@ -420,7 +421,7 @@ button {
     text-align: center;
     padding: 0;
     cursor: pointer;
-    border: 1px solid rgba(255, 255, 255, 0.4);
+    border: 1.5px solid rgba(255, 255, 255, 0.6) !important;
     border-radius: 8px;
     /* Softer look */
     transition: background 0.2s, opacity 0.2s;

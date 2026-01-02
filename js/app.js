@@ -2,6 +2,8 @@
 import { View3D } from './view3d.js';
 import { View2D } from './view2d.js';
 import { SettingsManager } from './settings.js';
+import { ViewStateManager } from './ViewStateManager.js';
+import { TouchManager } from './TouchManager.js';
 
 class App {
     constructor() {
@@ -58,6 +60,10 @@ class App {
         // Apply initial settings
         this.applyAllSettings();
 
+        // State Management System
+        this.viewState = new ViewStateManager();
+        this.setupStateHooks();
+
         this.bindEvents();
         this.loadData();
     }
@@ -66,6 +72,94 @@ class App {
         if (this.isDebug) {
             console.log(`[App] ${msg}`, ...args);
         }
+    }
+
+    setupStateHooks() {
+        // EXPLORE -> PREVIEW: Open image viewer
+        this.viewState.registerHook('preview', 'onEnter', (fromState) => {
+            this.log('Entering PREVIEW state');
+            this.ui.imageViewer.hidden = false;
+            this.ui.imageViewer.classList.add('visible');
+
+            // Pause 3D rendering to save battery
+            if (this.mode === '3D') {
+                this.view3d.pauseRendering();
+            }
+        });
+
+        // PREVIEW -> DETAIL: Enter magnifier
+        this.viewState.registerHook('detail', 'onEnter', (fromState) => {
+            this.log('Entering DETAIL state');
+            this.ui.imageViewer.classList.remove('transparent');
+            this.ui.fullImageContainer.style.display = 'flex';
+
+            // Completely hide 3D canvas to prevent event leakage
+            if (this.mode === '3D') {
+                document.getElementById('gallery-3d').style.display = 'none';
+            }
+
+            // Update zoom button
+            const zoomBtn = document.getElementById('zoomBtn');
+            if (zoomBtn) {
+                zoomBtn.innerText = '🔙';
+                zoomBtn.title = 'Return to Preview';
+            }
+
+            // Hide arrows in magnifier
+            this.ui.leftArrow.hidden = true;
+            this.ui.rightArrow.hidden = true;
+        });
+
+        // DETAIL -> PREVIEW: Exit magnifier
+        this.viewState.registerHook('preview', 'onEnter', (fromState) => {
+            if (fromState === 'detail') {
+                this.log('Exiting DETAIL to PREVIEW');
+                this.ui.fullImageContainer.style.display = 'none';
+
+                // Restore 3D canvas
+                if (this.mode === '3D') {
+                    document.getElementById('gallery-3d').style.display = 'block';
+                    this.ui.imageViewer.classList.add('transparent');
+                }
+
+                // Update zoom button
+                const zoomBtn = document.getElementById('zoomBtn');
+                if (zoomBtn) {
+                    zoomBtn.innerText = '🔍';
+                    zoomBtn.title = 'Zoom / Magnify';
+                }
+
+                // Restore arrows if not in slideshow
+                if (!this.isSlideshowActive) {
+                    this.ui.leftArrow.hidden = false;
+                    this.ui.rightArrow.hidden = false;
+                }
+            }
+        });
+
+        // PREVIEW -> EXPLORE: Close viewer
+        this.viewState.registerHook('explore', 'onEnter', (fromState) => {
+            this.log('Entering EXPLORE state');
+            this.ui.imageViewer.classList.remove('visible');
+            this.ui.imageViewer.classList.remove('transparent');
+
+            setTimeout(() => {
+                this.ui.imageViewer.hidden = true;
+                this.ui.fullImageContainer.innerHTML = '';
+                this.ui.fullImageContainer.style.display = 'none';
+            }, 300);
+
+            // Resume 3D rendering
+            if (this.mode === '3D') {
+                document.getElementById('gallery-3d').style.display = 'block';
+                this.view3d.resumeRendering();
+                this.view3d.exitLineView();
+            }
+
+            // Hide arrows
+            this.ui.leftArrow.hidden = true;
+            this.ui.rightArrow.hidden = true;
+        });
     }
 
     handleURLParams() {
@@ -130,10 +224,11 @@ class App {
             // 6. Init 3D View
             this.view3d.init(
                 this.images,
-                (index, openViewer) => this.selectImage(index, openViewer), // Original selectImage
-                (index) => this.preloadHighRes(index), // Original preloadHighRes
+                (index, openViewer) => this.selectImage(index, openViewer),
+                (index) => this.preloadHighRes(index),
                 this.isMobile,
-                this.isDebug
+                this.isDebug,
+                () => { if (!this.isSlideshowActive) this.toggleMagnifier(); } // Auto-Magnify Callback
             );
 
             // 7. Init 2D View
@@ -154,7 +249,8 @@ class App {
                 (index, openViewer) => this.selectImage(index, openViewer),
                 (index) => this.preloadHighRes(index),
                 this.isMobile,
-                this.isDebug
+                this.isDebug,
+                () => { if (!this.isSlideshowActive) this.toggleMagnifier(); }
             );
             this.view2d.init(this.images, (index) => this.selectImage(index, true), this.isDebug);
 
@@ -367,7 +463,6 @@ class App {
                     this.closeFullscreen();
                 }
             }
-            if (e.key === 'Enter') this.enterFullscreen();
             if (e.key === 'i' || e.key === 'I') this.toggleMetadata();
             if (e.key === 't' || e.key === 'T') {
                 const thumbs = document.getElementById('thumbnail-selector');
@@ -469,11 +564,12 @@ class App {
     }
 
     handleSwipe() {
-        // Block navigation if in Magnifier/Zoom mode
-        // 1. 3D Mode Magnified (Viewer not transparent)
-        if (this.mode === '3D' && !this.ui.imageViewer.classList.contains('transparent')) return;
+        // 1. ONLY navigate if the viewer is open. 
+        // If hidden, we are probably rotating the 3D sphere or browsing the 2D grid.
+        if (this.ui.imageViewer.hidden) return;
 
-        // 2. 2D Mode Zoomed
+        // 2. Block navigation ONLY if specifically zoomed in (panning)
+        // This allows swiping between images even in Magnifier mode if at 1x zoom.
         if (this.ui.fullImageContainer.isZoomed && this.ui.fullImageContainer.isZoomed()) return;
 
         if (Math.abs(this.touchStartX - this.touchEndX) > this.swipeThresh) {
@@ -742,6 +838,12 @@ class App {
         }
 
         this.log(`Opening Viewer for Idx:${index} Dir:${direction}`);
+
+        // Transition to PREVIEW state
+        if (this.viewState.getState() === 'explore') {
+            this.viewState.transition('preview');
+        }
+
         const imgName = this.images[index];
         const dir = this.useDataSaver ? 'thumbs' : 'fulls';
 
@@ -965,6 +1067,14 @@ class App {
             e.preventDefault();
             const delta = -Math.sign(e.deltaY) * 0.25;
             const nextZoom = Math.min(Math.max(1, zoomLevel + delta), 4);
+
+            // Auto-Exit Logic (User requested: "zoom out to exit magnifier")
+            // If we are at 1x and try to zoom out (delta < 0, scroll down)
+            if (this.mode === '3D' && zoomLevel <= 1 && delta < 0) {
+                this.toggleMagnifier();
+                return;
+            }
+
             if (nextZoom !== zoomLevel) {
                 zoomLevel = nextZoom;
                 if (zoomLevel === 1) { pannedX = 0; pannedY = 0; }
@@ -973,21 +1083,41 @@ class App {
             }
         };
 
-        // Double Click to Toggle Zoom (Max)
-        // We expose this event also for the Magnifier Button
-        container.ondblclick = (e) => {
-            // We can reuse the exposed method, or just run logic. 
-            // Reuse for consistency, but we need to update UI if triggered by double click?
-            // Since double click is a "hidden" feature, we might not update the button icon to 'Back'?
-            // Actually user might want to know they are in zoomed mode. 
-            // But updating App UI from here is messy.
-            // Let's just do the zoom. The button logic is primarily for the button interaction.
-            if (zoomLevel > 1) zoomLevel = 1;
-            else zoomLevel = 3.0;
-            pannedX = 0;
-            pannedY = 0;
+        // Single Click to Toggle Zoom (Enhanced UX for mobile/touch)
+        // User requested: "don't have to double tap to enable tap and zoom"
+        container.onclick = (e) => {
+            // If we are already zoomed, we want dragging to work, but a quick tap resets?
+            // Actually, if they are zoomed, dragging is handled by pointerdown/move.
+            // If they just CLICK (down then up without much move), toggle zoom.
+            if (zoomLevel > 1) {
+                // Return to 1x
+                zoomLevel = 1;
+                pannedX = 0;
+                pannedY = 0;
+            } else {
+                // Zoom to 3x center
+                zoomLevel = 3.0;
+                pannedX = 0;
+                pannedY = 0;
+            }
             newImg.style.transition = 'transform 0.3s ease-in-out';
             updateTransform();
+
+            // Sync Toggle Zoom Button UI
+            const zoomBtn = document.getElementById('zoomBtn');
+            if (zoomBtn) {
+                if (zoomLevel > 1) {
+                    zoomBtn.innerText = '🔙';
+                    zoomBtn.title = "Reset Zoom";
+                } else {
+                    zoomBtn.innerText = '🔍';
+                    zoomBtn.title = "Zoom / Magnify";
+                }
+            }
+        };
+
+        container.ondblclick = (e) => {
+            // Already handled by single click now for faster mobile access
         };
 
         container.onpointerdown = (e) => {
@@ -998,16 +1128,133 @@ class App {
             newImg.style.cursor = 'grabbing';
             newImg.style.transition = 'none'; // IMPORTANT: Instant drag
             container.setPointerCapture(e.pointerId);
-            e.preventDefault(); // Stop default touch actions
         };
+
+        // === TOUCH MANAGER INTEGRATION ===
+        const touchManager = new TouchManager(container);
+
+        let lastIncX = 0;
+        let lastIncY = 0;
+        let panInertia = null;
+
+        // Configure hysteresis for smooth transitions
+        touchManager.setHysteresis(1.15, 1.03);
+
+        // Register Pinch Gesture: Handle zoom with state transitions
+        touchManager.registerGesture('onPinch', (scale, thresholds) => {
+            const currentState = this.viewState.getState();
+
+            if (panInertia) { panInertia.kill(); panInertia = null; }
+
+            // State-based pinch handling
+            if (this.mode === '3D') {
+                if (currentState === 'preview' && scale > thresholds.enterThreshold) {
+                    this.viewState.transition('detail');
+                } else if (currentState === 'detail' && scale < thresholds.exitThreshold) {
+                    this.viewState.transition('preview');
+                }
+            }
+
+            // Apply zoom transform
+            if (currentState === 'detail' || this.mode === '2D') {
+                const scaleFactor = (scale - 1) * 0.5;
+                const nextZoom = Math.min(Math.max(1, zoomLevel + scaleFactor), 4);
+
+                if (nextZoom !== zoomLevel) {
+                    zoomLevel = nextZoom;
+                    if (zoomLevel === 1) { pannedX = 0; pannedY = 0; }
+                    newImg.style.transition = 'none';
+                    updateTransform();
+                }
+            }
+        });
+
+        // Register Pan Gesture: Move zoomed image with momentum
+        touchManager.registerGesture('onPan', (incX, incY, state) => {
+            if (zoomLevel <= 1) return;
+
+            if (state === 'start') {
+                if (panInertia) { panInertia.kill(); panInertia = null; }
+                newImg.style.transition = 'none';
+            } else if (state === 'move') {
+                pannedX += incX;
+                pannedY += incY;
+                lastIncX = incX;
+                lastIncY = incY;
+                updateTransform();
+            } else if (state === 'end') {
+                // Momentum Panning using GSAP
+                const velocityX = lastIncX * 10;
+                const velocityY = lastIncY * 10;
+
+                panInertia = gsap.to({ x: pannedX, y: pannedY }, {
+                    x: pannedX + velocityX,
+                    y: pannedY + velocityY,
+                    duration: 0.8,
+                    ease: "power2.out",
+                    onUpdate: function () {
+                        pannedX = this.targets()[0].x;
+                        pannedY = this.targets()[0].y;
+                        updateTransform();
+                    }
+                });
+            }
+        });
+
+        // Register Pull-Down Gesture: Dismiss viewer
+        touchManager.registerGesture('onPullDown', (totalY, state) => {
+            if (zoomLevel > 1) return;
+
+            if (state === 'start' || state === 'move') {
+                // Visual feedback: slide down and scale slightly
+                const progress = Math.min(totalY / 300, 1);
+                const scale = 1 - (progress * 0.15);
+                const opacity = 1 - (progress * 0.5);
+
+                newImg.style.transition = 'none';
+                newImg.style.transform = `translate(0, ${totalY * 0.5}px) scale(${scale})`;
+                newImg.style.opacity = opacity;
+                container.style.backgroundColor = `rgba(0,0,0,${0.9 * (1 - progress)})`;
+            } else if (state === 'end') {
+                if (totalY > 120) {
+                    // Trigger dismissal
+                    this.viewState.transition('explore');
+                } else {
+                    // Snap back
+                    gsap.to(newImg, {
+                        y: 0,
+                        scale: 1,
+                        opacity: 1,
+                        duration: 0.3,
+                        ease: "back.out(1.7)",
+                        onUpdate: () => {
+                            // Extract values from GSAP or just hardcode if simple
+                        },
+                        onComplete: () => {
+                            newImg.style.transform = 'translate(0,0) scale(1)';
+                            container.style.backgroundColor = '';
+                        }
+                    });
+                    gsap.to(container, {
+                        backgroundColor: 'rgba(0,0,0,0.9)',
+                        duration: 0.3
+                    });
+                }
+            }
+        });
+
+        touchManager.registerGesture('onTap', (touch) => {
+            // Let onclick handle it
+        });
+
+        container.addEventListener('touchend', () => {
+            // Cleanup handled by TouchManager
+        });
 
         container.onpointermove = (e) => {
             if (!isDragging) return;
-            e.preventDefault();
             pannedX = e.clientX - startX;
             pannedY = e.clientY - startY;
-            // No transition call here needed as we set it to none on down
-            // But just to be safe/explicit:
             newImg.style.transform = `translate(${pannedX}px, ${pannedY}px) scale(${zoomLevel})`;
         };
 
@@ -1015,7 +1262,7 @@ class App {
             if (!isDragging) return;
             isDragging = false;
             newImg.style.cursor = 'grab';
-            newImg.style.transition = 'transform 0.1s linear'; // Restore smooth
+            newImg.style.transition = 'transform 0.1s linear';
             container.releasePointerCapture(e.pointerId);
         };
 
@@ -1058,52 +1305,24 @@ class App {
     }
 
     toggleMagnifier() {
-        this.log(`toggleMagnifier called. Mode: ${this.mode}`);
-        const btn = document.getElementById('zoomBtn');
-        const thumbs = document.getElementById('thumbnail-selector');
+        this.log(`toggleMagnifier called. Current state: ${this.viewState.getState()}`);
 
         if (this.mode === '3D') {
-            const isMagnified = !this.ui.imageViewer.classList.contains('transparent');
-            if (isMagnified) {
-                // Exit Magnifier Mode (Return to 3D Line View)
-                this.ui.imageViewer.classList.add('transparent');
-                this.ui.fullImageContainer.innerHTML = ''; // Clear DOM image
+            const currentState = this.viewState.getState();
 
-                // Restore Icon
-                if (btn) {
-                    btn.innerText = '🔍';
-                    btn.title = "Zoom / Magnify";
-                }
-
-                // Restore Thumbs
-                if (thumbs) thumbs.classList.remove('hidden');
-
-                // Restore Arrows (if not slideshow)
-                if (!this.isSlideshowActive) {
-                    this.ui.leftArrow.hidden = false;
-                    this.ui.rightArrow.hidden = false;
-                }
-
-            } else {
-                // Enter Magnifier Mode (Overlay 2D Image)
-                this.ui.imageViewer.classList.remove('transparent');
+            if (currentState === 'detail') {
+                // Exit DETAIL -> PREVIEW
+                this.viewState.transition('preview');
+            } else if (currentState === 'preview') {
+                // Enter PREVIEW -> DETAIL
                 this.mountActiveImage(this.currentIndex, 0);
-
-                // Update Icon
-                if (btn) {
-                    btn.innerText = '🔙';
-                    btn.title = "Return to Gallery";
-                }
-
-                // Auto-collapse carousel for better view
-                if (thumbs) thumbs.classList.add('hidden');
-
-                // Hide Arrows
-                this.ui.leftArrow.hidden = true;
-                this.ui.rightArrow.hidden = true;
+                this.viewState.transition('detail');
             }
         } else {
             // 2D Mode: Use the explicit toggle handler if available
+            const btn = document.getElementById('zoomBtn');
+            const thumbs = document.getElementById('thumbnail-selector');
+
             if (this.ui.fullImageContainer.toggleZoom) {
                 const isZoomed = this.ui.fullImageContainer.toggleZoom();
 
@@ -1185,34 +1404,8 @@ class App {
         // Close Metadata (Always)
         this.ui.metadataViewer.classList.remove('visible');
 
-        this.ui.imageViewer.classList.remove('visible');
-        this.ui.imageViewer.classList.remove('transparent'); // Ensure we strip this immediately
-
-        if (this.viewerCloseTimer) clearTimeout(this.viewerCloseTimer);
-        this.viewerCloseTimer = setTimeout(() => {
-            this.ui.imageViewer.hidden = true;
-            this.ui.fullImageContainer.innerHTML = '';
-
-            // If in 3D mode, exit Line View and re-hide arrows
-            if (this.mode === '3D') {
-                this.view3d.exitLineView();
-                this.ui.leftArrow.hidden = true;
-                this.ui.rightArrow.hidden = true;
-            } else {
-                // In 2D Mode, closing means deselecting
-                this.view2d.goToIndex(-1); // Clear grid highlight
-
-                // Hide Arrows (return to Grid)
-                this.ui.leftArrow.hidden = true;
-                this.ui.rightArrow.hidden = true;
-            }
-
-            // Reset Zoom Icon
-            const zoomBtn = document.getElementById('zoomBtn');
-            if (zoomBtn) zoomBtn.innerText = '🔍';
-
-            this.viewerCloseTimer = null;
-        }, 300);
+        // Transition to EXPLORE state (handles all cleanup via hooks)
+        this.viewState.transition('explore');
 
         // Restore Global Top Controls
         // Ensure we force these back to interactive state
@@ -1260,14 +1453,6 @@ class App {
     hideLightPollutionMap() {
         this.ui.lightPollutionOverlay.classList.remove('visible');
         this.ui.lightPollutionIframe.src = 'about:blank';
-    }
-
-    enterFullscreen() {
-        if (this.mode === '2D') {
-            this.selectImage(this.currentIndex, true);
-        } else {
-            this.toggleMetadata();
-        }
     }
 }
 

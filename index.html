@@ -78,6 +78,15 @@
                     </label>
                 </div>
 
+                <div class="setting-group">
+                    <h3>Slideshow</h3>
+                    <label>
+                        <span>Interval (sec)</span>
+                        <input type="range" id="set-interval" min="1" max="10" step="0.5" value="3.0">
+                        <span class="val-display" id="disp-interval">3.0s</span>
+                    </label>
+                </div>
+
                 <div class="setting-group" id="group-2d">
                     <h3>2D Layout</h3>
                     <label>
@@ -115,6 +124,7 @@
         <!-- Controls Container -->
         <div id="viewer-controls">
             <button id="toggleThumbs" title="Toggle Palette">🖼️</button>
+            <button id="viewer-slideshow" title="Toggle Slideshow">▶️</button>
             <button id="toggleMetadata" title="Info">ℹ️</button>
             <button id="zoomBtn" title="Zoom / Magnify">🔍</button>
             <button id="fullscreenToggle" title="Fullscreen">⛶</button>

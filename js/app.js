@@ -19,11 +19,18 @@ class App {
         this.touchEndX = 0;
         this.swipeThresh = 75;
 
+        // Slideshow State
+        this.isSlideshowActive = false;
+        this.slideshowInterval = 3000;
+        this.slideshowTimer = null;
+        this.viewerCloseTimer = null; // Prevent race conditions
+
         // Elements
         this.ui = {
             title: document.getElementById('title'),
             toggle: document.getElementById('mode-toggle'),
             topControls: document.getElementById('top-controls'), // Added
+            viewerSlideshow: document.getElementById('viewer-slideshow'), // Added
             metadataViewer: document.getElementById('metadataViewer'),
             toggleMetadata: document.getElementById('toggleMetadata'),
             globalFullscreen: document.getElementById('global-fullscreen'),
@@ -58,6 +65,36 @@ class App {
     log(msg, ...args) {
         if (this.isDebug) {
             console.log(`[App] ${msg}`, ...args);
+        }
+    }
+
+    handleURLParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        this.useDataSaver = urlParams.has('datasaver');
+
+        // Mode
+        if (urlParams.get('mode') === '2d' || urlParams.has('gallery')) {
+            this.switchMode('2D');
+        }
+
+        // Initial Selection (Deep link)
+        let initialIndex = 0;
+        const targetImg = urlParams.get('img');
+        if (targetImg) {
+            const idx = this.images.indexOf(targetImg.replace('.jpg', ''));
+            if (idx !== -1) initialIndex = idx;
+        }
+        this.selectImage(initialIndex);
+
+        // Slideshow Params
+        if (urlParams.has('interval')) {
+            const interval = parseInt(urlParams.get('interval'));
+            if (!isNaN(interval) && interval > 500) {
+                this.settings.set('slideshowInterval', interval / 1000);
+            }
+        }
+        if (urlParams.has('slideshow')) {
+            this.startSlideshow();
         }
     }
 
@@ -102,25 +139,10 @@ class App {
             // 7. Init 2D View
             this.view2d.init(this.images, (index) => this.selectImage(index, true)); // Original selectImage
 
-            // 8. Apply initial state and URL params (moved from original initViews)
-            this.switchMode(this.mode); // Initial State
-
-            const urlParams = new URLSearchParams(window.location.search);
-            this.useDataSaver = urlParams.has('datasaver');
-
-            if (urlParams.get('mode') === '2d' || urlParams.has('gallery')) {
-                this.switchMode('2D');
-            }
-
-            // Initial Selection (Deep link)
-            let initialIndex = 0;
-            const targetImg = urlParams.get('img');
-            if (targetImg) {
-                const idx = this.images.indexOf(targetImg.replace('.jpg', ''));
-                if (idx !== -1) initialIndex = idx;
-            }
-            this.selectImage(initialIndex);
-            this.typeTitle(); // Original call from loadData
+            // 8. Apply initial state and URL params
+            this.switchMode(this.mode); // Reset to default first
+            this.handleURLParams();
+            this.typeTitle();
 
         } catch (error) {
             if (this.isDebug) console.warn("Metadata load failed, falling back to static list.", error);
@@ -135,8 +157,9 @@ class App {
                 this.isDebug
             );
             this.view2d.init(this.images, (index) => this.selectImage(index, true), this.isDebug);
+
             this.switchMode(this.mode); // Initial State
-            this.selectImage(0); // Select first image on fallback
+            this.handleURLParams();
             this.typeTitle();
         }
     }
@@ -149,13 +172,22 @@ class App {
         if (key === 'gridColumns') {
             this.view2d.updateSettings(key, value);
         }
+        if (key === 'slideshowInterval') {
+            this.slideshowInterval = value * 1000; // Store as ms
+            // Restart if running
+            if (this.isSlideshowActive) {
+                this.stopSlideshow();
+                this.startSlideshow();
+            }
+        }
 
         // Update display values in settings modal
         const displayMap = {
             'resolution': { id: 'disp-resolution', suffix: 'x' },
             'sphereSpacing': { id: 'disp-sphere', suffix: '' },
             'particleCount': { id: 'disp-particles', suffix: '' },
-            'gridColumns': { id: 'disp-grid', suffix: '' }
+            'gridColumns': { id: 'disp-grid', suffix: '' },
+            'slideshowInterval': { id: 'disp-interval', suffix: 's' }
         };
 
         if (displayMap[key]) {
@@ -168,7 +200,7 @@ class App {
 
     applyAllSettings() {
         // Sync all settings from manager to views
-        const keys = ['resolution', 'sphereSpacing', 'particleCount', 'gridColumns'];
+        const keys = ['resolution', 'sphereSpacing', 'particleCount', 'gridColumns', 'slideshowInterval'];
         keys.forEach(k => this.applySetting(k, this.settings.get(k)));
     }
 
@@ -288,35 +320,22 @@ class App {
         ];
     }
 
-    initViews() {
-        const onSelect = (index, openViewer) => this.selectImage(index, openViewer);
-        this.view3d.init(this.images, onSelect, null, this.isDebug);
-        this.view2d.init(this.images, onSelect, this.isDebug);
 
-        // Initial State
-        this.switchMode(this.mode);
-
-        // Handle URL params
-        const urlParams = new URLSearchParams(window.location.search);
-        this.useDataSaver = urlParams.has('datasaver');
-
-        if (urlParams.get('mode') === '2d' || urlParams.has('gallery')) {
-            this.switchMode('2D');
-        }
-
-        // Initial Selection (Deep link)
-        let initialIndex = 0;
-        const targetImg = urlParams.get('img');
-        if (targetImg) {
-            const idx = this.images.indexOf(targetImg.replace('.jpg', '')); // assume param might be 'name' or 'name.jpg'
-            if (idx !== -1) initialIndex = idx;
-        }
-        this.selectImage(initialIndex);
-    }
 
     bindEvents() {
         if (this.ui.globalFullscreen) {
             this.ui.globalFullscreen.onclick = () => this.toggleNativeFullscreen();
+        }
+
+        // Slideshow Toggle
+        if (this.ui.btnSlideshow) {
+            this.ui.btnSlideshow.onclick = () => this.toggleSlideshow();
+        }
+        if (this.ui.viewerSlideshow) {
+            this.ui.viewerSlideshow.onclick = (e) => {
+                e.stopPropagation();
+                this.toggleSlideshow();
+            };
         }
 
         this.ui.toggle.onclick = () => {
@@ -408,6 +427,7 @@ class App {
                 document.getElementById('set-sphere').value = this.settings.get('sphereSpacing');
                 document.getElementById('set-particles').value = this.settings.get('particleCount');
                 document.getElementById('set-grid').value = this.settings.get('gridColumns');
+                document.getElementById('set-interval').value = this.settings.get('slideshowInterval');
             };
         }
 
@@ -433,6 +453,7 @@ class App {
         bindInput('set-sphere', 'sphereSpacing', true);
         bindInput('set-particles', 'particleCount', false);
         bindInput('set-grid', 'gridColumns', false);
+        bindInput('set-interval', 'slideshowInterval', true);
 
         if (resetSettings) {
             resetSettings.onclick = () => {
@@ -442,14 +463,19 @@ class App {
                 document.getElementById('set-sphere').value = this.settings.get('sphereSpacing');
                 document.getElementById('set-particles').value = this.settings.get('particleCount');
                 document.getElementById('set-grid').value = this.settings.get('gridColumns');
+                document.getElementById('set-interval').value = this.settings.get('slideshowInterval');
             };
         }
     }
 
     handleSwipe() {
-        // Only if not zoomed in viewer? For simplicity, global swipe for nav
-        // But if we are in viewer and zoomed, we shouldn't nav. 
-        // We'll leave zoom logic to specific viewer handlers later.
+        // Block navigation if in Magnifier/Zoom mode
+        // 1. 3D Mode Magnified (Viewer not transparent)
+        if (this.mode === '3D' && !this.ui.imageViewer.classList.contains('transparent')) return;
+
+        // 2. 2D Mode Zoomed
+        if (this.ui.fullImageContainer.isZoomed && this.ui.fullImageContainer.isZoomed()) return;
+
         if (Math.abs(this.touchStartX - this.touchEndX) > this.swipeThresh) {
             if (this.touchEndX < this.touchStartX) this.next();
             if (this.touchEndX > this.touchStartX) this.prev();
@@ -547,12 +573,16 @@ class App {
         new Image().src = src;
     }
 
-    next() {
-        this.selectImage(this.currentIndex + 1, false, 1);
+    next(openViewer = false) {
+        let nextIndex = this.currentIndex + 1;
+        if (nextIndex >= this.images.length) nextIndex = 0; // Loop to start
+        this.selectImage(nextIndex, openViewer, 1);
     }
 
     prev() {
-        this.selectImage(this.currentIndex - 1, false, -1);
+        let prevIndex = this.currentIndex - 1;
+        if (prevIndex < 0) prevIndex = this.images.length - 1; // Loop to end
+        this.selectImage(prevIndex, false, -1);
     }
 
     typeTitle() {
@@ -564,6 +594,56 @@ class App {
             i++;
             if (i > titleText.length) clearInterval(interval);
         }, 50);
+    }
+
+    // --- Slideshow Logic ---
+    toggleSlideshow() {
+        if (this.isSlideshowActive) {
+            this.stopSlideshow();
+        } else {
+            this.startSlideshow();
+        }
+    }
+
+    startSlideshow() {
+        if (this.isSlideshowActive) return;
+        this.isSlideshowActive = true;
+        this.log(`Starting slideshow. Interval: ${this.slideshowInterval}ms`);
+
+
+        if (this.ui.viewerSlideshow) {
+            this.ui.viewerSlideshow.innerText = '⏸️';
+            this.ui.viewerSlideshow.title = "Stop Slideshow";
+        }
+
+        // Feature: Slideshow "goes into image viewer"
+        // Ensure viewer is open AND update state (hide arrows, zoom 3D)
+        this.selectImage(this.currentIndex, true);
+
+        this.slideshowTimer = setInterval(() => {
+            // Keep viewer open if slideshow is running
+            this.next(true);
+        }, this.slideshowInterval);
+    }
+
+    stopSlideshow() {
+        if (!this.isSlideshowActive) return;
+        this.isSlideshowActive = false;
+        this.log("Stopping slideshow.");
+
+        if (this.slideshowTimer) {
+            clearInterval(this.slideshowTimer);
+            this.slideshowTimer = null;
+        }
+
+
+        if (this.ui.viewerSlideshow) {
+            this.ui.viewerSlideshow.innerText = '▶️';
+            this.ui.viewerSlideshow.title = "Start Slideshow";
+        }
+
+        // Restore UI state (Arrows, standard zoom)
+        this.selectImage(this.currentIndex, true);
     }
 
     // --- Metadata Logic ---
@@ -655,6 +735,12 @@ class App {
 
     // --- Viewer Logic ---
     openFullscreenViewer(index, direction = 0) {
+        // Cancel any pending close animation to prevent race conditions
+        if (this.viewerCloseTimer) {
+            clearTimeout(this.viewerCloseTimer);
+            this.viewerCloseTimer = null;
+        }
+
         this.log(`Opening Viewer for Idx:${index} Dir:${direction}`);
         const imgName = this.images[index];
         const dir = this.useDataSaver ? 'thumbs' : 'fulls';
@@ -693,9 +779,14 @@ class App {
             this.ui.imageViewer.classList.add('visible');
             this.ui.imageViewer.classList.add('transparent'); // IMPORTANT: No black bg
 
-            // Show Arrows (They were hidden in Globe mode)
-            this.ui.leftArrow.hidden = false;
-            this.ui.rightArrow.hidden = false;
+            // Show Arrows (Only if not slideshow)
+            if (!this.isSlideshowActive) {
+                this.ui.leftArrow.hidden = false;
+                this.ui.rightArrow.hidden = false;
+            } else {
+                this.ui.leftArrow.hidden = true;
+                this.ui.rightArrow.hidden = true;
+            }
 
             // RESET UI STATE (Fix for navigation from Magnified state)
             const zoomBtn = document.getElementById('zoomBtn');
@@ -716,6 +807,14 @@ class App {
                 this.thumbnailsCreated = true;
             }
             this.updateThumbSelector(index);
+
+            // Toggle Thumbs visibility for slideshow at default
+            // Toggle Thumbs visibility for slideshow at default
+            const thumbs = document.getElementById('thumbnail-selector');
+            if (thumbs) {
+                if (this.isSlideshowActive) thumbs.classList.add('hidden');
+            }
+            return;
             return;
         }
 
@@ -723,15 +822,29 @@ class App {
         this.ui.imageViewer.hidden = false; // Fixed: Ensure hidden is removed so selectImage tracks visibility
         this.ui.imageViewer.classList.remove('transparent'); // Ensure black bg for 2D
 
-        // Show Arrows for navigation
-        this.ui.leftArrow.hidden = false;
-        this.ui.rightArrow.hidden = false;
+        // Show Arrows for navigation (Only if not slideshow)
+        if (!this.isSlideshowActive) {
+            this.ui.leftArrow.hidden = false;
+            this.ui.rightArrow.hidden = false;
+        } else {
+            this.ui.leftArrow.hidden = true;
+            this.ui.rightArrow.hidden = true;
+        }
 
         this.mountActiveImage(index, direction);
 
         // Show Arrows for navigation
-        this.ui.leftArrow.hidden = false;
-        this.ui.rightArrow.hidden = false;
+        if (!this.isSlideshowActive) {
+            this.ui.leftArrow.hidden = false;
+            this.ui.rightArrow.hidden = false;
+        }
+
+        // Toggle Thumbs visibility for slideshow
+        // Toggle Thumbs visibility for slideshow
+        const thumbs = document.getElementById('thumbnail-selector');
+        if (thumbs) {
+            if (this.isSlideshowActive) thumbs.classList.add('hidden');
+        }
 
         // Fade In Viewer
         requestAnimationFrame(() => {
@@ -843,6 +956,9 @@ class App {
             updateTransform();
             return isZoomed;
         };
+
+        // Expose state helper
+        container.isZoomed = () => zoomLevel > 1;
 
         // Event Listeners
         container.onwheel = (e) => {
@@ -962,6 +1078,12 @@ class App {
                 // Restore Thumbs
                 if (thumbs) thumbs.classList.remove('hidden');
 
+                // Restore Arrows (if not slideshow)
+                if (!this.isSlideshowActive) {
+                    this.ui.leftArrow.hidden = false;
+                    this.ui.rightArrow.hidden = false;
+                }
+
             } else {
                 // Enter Magnifier Mode (Overlay 2D Image)
                 this.ui.imageViewer.classList.remove('transparent');
@@ -975,6 +1097,10 @@ class App {
 
                 // Auto-collapse carousel for better view
                 if (thumbs) thumbs.classList.add('hidden');
+
+                // Hide Arrows
+                this.ui.leftArrow.hidden = true;
+                this.ui.rightArrow.hidden = true;
             }
         } else {
             // 2D Mode: Use the explicit toggle handler if available
@@ -989,6 +1115,10 @@ class App {
                         btn.title = "Reset Zoom";
                     }
                     if (thumbs) thumbs.classList.add('hidden');
+
+                    // Hide Arrows
+                    this.ui.leftArrow.hidden = true;
+                    this.ui.rightArrow.hidden = true;
                 } else {
                     // Zoomed Out (Reset)
                     if (btn) {
@@ -996,6 +1126,12 @@ class App {
                         btn.title = "Zoom / Magnify";
                     }
                     if (thumbs) thumbs.classList.remove('hidden');
+
+                    // Restore Arrows (if not slideshow)
+                    if (!this.isSlideshowActive) {
+                        this.ui.leftArrow.hidden = false;
+                        this.ui.rightArrow.hidden = false;
+                    }
                 }
             } else {
                 // Fallback (Shouldn't happen if initialized correctly)
@@ -1041,10 +1177,19 @@ class App {
     }
 
     closeFullscreen() {
+        // Stop Slideshow
+        if (this.isSlideshowActive) {
+            this.stopSlideshow();
+        }
+
+        // Close Metadata (Always)
+        this.ui.metadataViewer.classList.remove('visible');
+
         this.ui.imageViewer.classList.remove('visible');
         this.ui.imageViewer.classList.remove('transparent'); // Ensure we strip this immediately
 
-        setTimeout(() => {
+        if (this.viewerCloseTimer) clearTimeout(this.viewerCloseTimer);
+        this.viewerCloseTimer = setTimeout(() => {
             this.ui.imageViewer.hidden = true;
             this.ui.fullImageContainer.innerHTML = '';
 
@@ -1056,7 +1201,6 @@ class App {
             } else {
                 // In 2D Mode, closing means deselecting
                 this.view2d.goToIndex(-1); // Clear grid highlight
-                this.ui.metadataViewer.classList.remove('visible'); // Hide metadata overlay
 
                 // Hide Arrows (return to Grid)
                 this.ui.leftArrow.hidden = true;
@@ -1067,6 +1211,7 @@ class App {
             const zoomBtn = document.getElementById('zoomBtn');
             if (zoomBtn) zoomBtn.innerText = '🔍';
 
+            this.viewerCloseTimer = null;
         }, 300);
 
         // Restore Global Top Controls

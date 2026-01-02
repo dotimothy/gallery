@@ -234,6 +234,47 @@ export class View3D {
         return this.radius * Math.min(7, multiplier);
     }
 
+    getResponsiveLineDistance(index) {
+        if (!this.frames[index]) return 6; // Fallback
+
+        // 1. Get Image dimensions in World Space
+        const mesh = this.frames[index];
+        const imgWidth = mesh.scale.x;
+        // height is always 5 based on loader logic
+
+        // 2. Camera params
+        // Vertical FOV in radians
+        const vFOV = (this.camera.fov * Math.PI) / 180;
+
+        // 3. Calculate distance to fit WIDTH
+        // FrustumWidth = 2 * dist * tan(vFOV/2) * aspect
+        // We want FrustumWidth >= imgWidth
+        // dist = imgWidth / (2 * tan(vFOV/2) * aspect)
+
+        // Add minimal padding (1.1x) to avoid edge touching
+        const padding = 1.1;
+        const requiredDistForWidth = (imgWidth * padding) / (2 * Math.tan(vFOV / 2) * this.camera.aspect);
+
+        // 4. Calculate distance to fit HEIGHT (just in case)
+        // FrustumHeight = 2 * dist * tan(vFOV/2)
+        // dist = imgHeight / (2 * tan(vFOV/2))
+        const requiredDistForHeight = (mesh.scale.y * padding) / (2 * Math.tan(vFOV / 2));
+
+        // 5. Use the max distance to ensure BOTH fit (Contain logic)
+        // User specifically asked for "width fits", which usually implies ensuring width is visible.
+        // If we strictly follow "width fits", we might cut off height on very wide screens?
+        // No, standard "contain" uses max distance.
+        // Let's stick to "Contain" which satisfies "width fits" implicitly.
+
+        // However, if the user meant "Cover" (zoom until width fills, potentially cropping height)?
+        // "width of the image fits on the users scren" -> "Width matches Screen Width"
+        // This is exactly `requiredDistForWidth`.
+
+        // Let's use `requiredDistForWidth` as the primary driver, 
+        // but clamped to a reasonable minimum (don't go too close than 5).
+        return Math.max(5, requiredDistForWidth);
+    }
+
     bindEvents() {
         const onDown = (x, y) => {
             if (this.layout === 'LINE') return; // Disable drag rotation in Line mode for now
@@ -416,7 +457,7 @@ export class View3D {
         gsap.to(this.pivot.rotation, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.out" });
 
         // 2. Animate Camera to a good viewing distance for simple line
-        const lineDist = 15; // Tighter focus on single image (was 30)
+        const lineDist = this.getResponsiveLineDistance(targetIndex);
         gsap.to(this.camera.position, { z: lineDist, duration: 0.8, ease: "power2.out" });
 
         // 3. Move all frames to Line positions
@@ -569,7 +610,11 @@ export class View3D {
         // Recalculate based on current dynamic radius
         this.baseDistance = this.getOptimalDistance();
 
-        if (!this.isZoomedIn) {
+        if (this.layout === 'LINE' && this.frames[this.currentIndex]) {
+            // In line mode, resize should update distance to maintain "fit"
+            const dist = this.getResponsiveLineDistance(this.currentIndex);
+            this.camera.position.z = dist;
+        } else if (!this.isZoomedIn) {
             this.camera.position.z = this.baseDistance;
         }
     }

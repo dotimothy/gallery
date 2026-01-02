@@ -135,7 +135,8 @@ button {
 #home,
 #mode-toggle,
 #global-fullscreen,
-#toggleSettings {
+#toggleSettings,
+#btn-slideshow {
     position: relative;
     /* Relative to container */
     top: auto;
@@ -158,7 +159,8 @@ button {
 #home:hover,
 #mode-toggle:hover,
 #global-fullscreen:hover,
-#toggleSettings:hover {
+#toggleSettings:hover,
+#btn-slideshow:hover {
     background: rgba(255, 255, 255, 0.1);
     border-color: white;
 }
@@ -403,6 +405,7 @@ button {
 #fullscreenToggle,
 #toggleMetadata,
 #toggleThumbs,
+#viewer-slideshow,
 #zoomBtn {
     position: relative;
     /* Relative to flex container */
@@ -417,16 +420,14 @@ button {
     text-align: center;
     padding: 0;
     cursor: pointer;
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: 8px;
     /* Softer look */
     transition: background 0.2s, opacity 0.2s;
     opacity: 0.8;
 }
 
-#zoomBtn {
-    border: 1px solid rgba(255, 255, 255, 0.4);
-}
+
 
 #toggleMetadata {
     display: block !important;
@@ -507,7 +508,8 @@ button {
     #home,
     #mode-toggle,
     #global-fullscreen,
-    #toggleSettings {
+    #toggleSettings,
+    #btn-slideshow {
         font-size: 1.25em;
         /* Slightly larger for better emoji visibility */
         padding: 0 12px;

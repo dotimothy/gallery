@@ -132,7 +132,6 @@ button {
     z-index: 20;
 }
 
-#home,
 #mode-toggle,
 #global-fullscreen,
 #toggleSettings,
@@ -156,7 +155,6 @@ button {
     /* specific height */
 }
 
-#home:hover,
 #mode-toggle:hover,
 #global-fullscreen:hover,
 #toggleSettings:hover,
@@ -506,7 +504,6 @@ button {
         justify-content: center;
     }
 
-    #home,
     #mode-toggle,
     #global-fullscreen,
     #toggleSettings,
@@ -629,10 +626,6 @@ footer a {
     color: white;
     /* Or specific brand color */
     text-decoration: underline;
-}
-
-#home:hover {
-    opacity: 1;
 }
 
 /* Controls UI (Close, Fullscreen) */

@@ -829,7 +829,7 @@ class App {
             }
             html += `<p>📷: ${model}</p>`;
             html += `<p>${size} MB | ${w}x${h} | ${res} MP</p>`;
-            html += `<p>ISO ${iso} | ${focalLength}mm| F${f} | ${exp}" s</p>`;
+            html += `<p>ISO ${iso} | ${focalLength}mm | F${f} | ${exp}" s</p>`;
 
         } else {
             html += `<p>No metadata available.</p>`;

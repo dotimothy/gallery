@@ -815,6 +815,7 @@ class App {
             const safeEval = (s) => { try { return eval(s); } catch { return s; } };
             const iso = data['EXIF ISOSpeedRatings'] ? safeEval(data['EXIF ISOSpeedRatings']) : 'N/A';
             const f = data['EXIF FNumber'] ? safeEval(data['EXIF FNumber']) : 'N/A';
+            const focalLength = data['EXIF FocalLength'] ? safeEval(data['EXIF FocalLength']) : 'N/A';
             const expRaw = data['EXIF ExposureTime'] ? safeEval(data['EXIF ExposureTime']) : 'N/A';
             const exp = (typeof expRaw === 'number' && expRaw < 0.1 && expRaw > 0) ? `1/${Math.round(1 / expRaw)}` : expRaw;
 
@@ -828,7 +829,7 @@ class App {
             }
             html += `<p>📷: ${model}</p>`;
             html += `<p>${size} MB | ${w}x${h} | ${res} MP</p>`;
-            html += `<p>ISO ${iso} | F${f} | ${exp}" s</p>`;
+            html += `<p>ISO ${iso} | ${focalLength}mm| F${f} | ${exp}" s</p>`;
 
         } else {
             html += `<p>No metadata available.</p>`;

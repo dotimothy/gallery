@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Immersive Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: black;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            touch-action: none;
+            user-select: none;
+            font-family: 'Roboto', sans-serif;
+            color: white;
+        }
+
+        #container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        #image {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transform-origin: center center;
+            will-change: transform;
+            cursor: grab;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        #controls-top {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 15px;
+            z-index: 100;
+            transition: opacity 0.5s ease;
+        }
+
+        #controls-bottom {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 100;
+            transition: opacity 0.5s ease;
+            align-items: center;
+        }
+
+        button {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1.5px solid rgba(255, 255, 255, 0.6);
+            color: white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 1.2em;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            outline: none;
+            transition: background 0.2s, transform 0.1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        button:active {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(0.95);
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: translate(-50%, -50%) rotate(0deg);
+            }
+
+            100% {
+                transform: translate(-50%, -50%) rotate(360deg);
+            }
+        }
+
+        #metadataOverlay {
+            position: fixed;
+            bottom: 0px;
+            left: 0;
+            width: 100%;
+            padding: 20px 20px 100px 20px;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0));
+            color: #eee;
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 90;
+        }
+
+        #metadataOverlay.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        #metadataOverlay h2 {
+            margin: 0 0 5px 0;
+            font-size: 1.4em;
+            font-weight: 300;
+        }
+
+        #metadataOverlay p {
+            margin: 2px 0;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        .nav-zone {
+            position: fixed;
+            top: 10%;
+            height: 80%;
+            width: 15%;
+            z-index: 80;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .nav-zone:hover {
+            opacity: 1;
+        }
+
+        #nav-left {
+            left: 0;
+        }
+
+        #nav-right {
+            right: 0;
+        }
+
+        .zone-arrow {
+            font-size: 3em;
+            color: rgba(255, 255, 255, 0.5);
+            text-shadow: 0 0 10px black;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="container">
+        <div class="loader" id="loader"></div>
+        <img id="image" draggable="false" />
+    </div>
+
+    <div id="nav-left" class="nav-zone"></div>
+    <div id="nav-right" class="nav-zone"></div>
+
+    <script type="module">
+        import { TouchManager } from './js/TouchManager.js';
+
+        const params = new URLSearchParams(window.location.search);
+        const imgSrc = params.get('img');
+        const nextSrc = params.get('next');
+        const prevSrc = params.get('prev');
+        const interval = parseInt(params.get('interval') || '3000');
+        const isSlideshow = params.has('slideshow');
+
+        const imgEl = document.getElementById('image');
+        const loader = document.getElementById('loader');
+        const container = document.getElementById('container');
+
+        // State
+        let state = {
+            scale: 1,
+            x: 0,
+            y: 0,
+            lastScale: 1,
+            isZoomed: false
+        };
+
+        const config = {
+            minScale: 1,
+            maxScale: 6,
+            zoomStep: 0.1,
+            doubleTapScale: 3
+        };
+
+        // --- Initialization ---
+        if (imgSrc) {
+            imgEl.src = imgSrc;
+            imgEl.onload = () => {
+                loader.style.display = 'none';
+                imgEl.style.opacity = '1';
+                resetTransform();
+                preload(nextSrc);
+                preload(prevSrc);
+            };
+            imgEl.onerror = () => {
+                loader.style.display = 'none';
+                console.error('Failed to load image:', imgSrc);
+            };
+        }
+
+        function preload(url) {
+            if (!url) return;
+            const link = document.createElement('link');
+            link.rel = 'preload'; link.as = 'image'; link.href = url;
+            document.head.appendChild(link);
+        }
+
+        // --- Navigation Logic ---
+        function goNext() {
+            if (window.parent) window.parent.postMessage({ action: 'next' }, '*');
+        }
+        function goPrev() {
+            if (window.parent) window.parent.postMessage({ action: 'prev' }, '*');
+        }
+        function closeViewer() {
+            if (window.parent) window.parent.postMessage({ action: 'close' }, '*');
+        }
+
+        if (isSlideshow && nextSrc) {
+            setInterval(goNext, Math.max(1, interval));
+        }
+
+        // --- Zoom at Pointer Math ---
+        function zoomAt(targetScale, pointerX, pointerY) {
+            // Constrain scale
+            const newScale = Math.max(config.minScale, Math.min(config.maxScale, targetScale));
+            const oldScale = state.scale;
+            state.scale = newScale;
+
+            if (newScale <= 1.01) {
+                resetTransform();
+                return;
+            }
+
+            // Adjust x/y so the point under pointer stays fixed
+            // Formula: nextPos = pointer - (pointer - currentPos) * (nextScale / currentScale)
+            // But since we are centered by flex, currentPos is effectively container center.
+            const rect = container.getBoundingClientRect();
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+
+            const relX = pointerX - centerX - state.x;
+            const relY = pointerY - centerY - state.y;
+
+            const ratio = newScale / oldScale;
+            state.x -= relX * (ratio - 1);
+            state.y -= relY * (ratio - 1);
+
+            state.isZoomed = true;
+            applyTransform();
+        }
+
+        function applyTransform() {
+            // Bounded Panning: Keep image edges within view if smaller than screen, 
+            // OR keep edges touching screen if larger.
+            const rect = imgEl.getBoundingClientRect();
+            const viewW = container.clientWidth;
+            const viewH = container.clientHeight;
+
+            // Half dimensions of the scaled image
+            const hw = (imgEl.naturalWidth * (imgEl.offsetHeight / imgEl.naturalHeight) * state.scale) / 2 || (viewW * state.scale) / 2;
+            const hh = (viewH * state.scale) / 2;
+
+            // Bound logic: 
+            // If image is wider than view, X can move between +/- (imageW - viewW)/2
+            const limitX = Math.max(0, (viewW * state.scale - viewW) / 2);
+            const limitY = Math.max(0, (viewH * state.scale - viewH) / 2);
+
+            state.x = Math.max(-limitX, Math.min(limitX, state.x));
+            state.y = Math.max(-limitY, Math.min(limitY, state.y));
+
+            imgEl.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+            imgEl.style.cursor = state.scale > 1 ? 'grab' : 'default';
+        }
+
+        function resetTransform() {
+            state = { scale: 1, x: 0, y: 0, lastScale: 1, isZoomed: false };
+            imgEl.style.transform = `translate(0px, 0px) scale(1)`;
+            imgEl.style.cursor = 'default';
+        }
+
+        // --- Event Listeners ---
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = -e.deltaY;
+            const factor = Math.pow(1.1, delta / 100);
+            zoomAt(state.scale * factor, e.clientX, e.clientY);
+        }, { passive: false });
+
+        document.getElementById('nav-left').onclick = (e) => { if (!state.isZoomed) goPrev(); };
+        document.getElementById('nav-right').onclick = (e) => { if (!state.isZoomed) goNext(); };
+
+        // Double Click to Toggle Zoom
+        container.addEventListener('dblclick', (e) => {
+            if (state.scale > 1.1) resetTransform();
+            else zoomAt(config.doubleTapScale, e.clientX, e.clientY);
+        });
+
+        // --- Mouse Pan Implementation ---
+        let isDragging = false;
+        let lastM = { x: 0, y: 0 };
+
+        container.addEventListener('mousedown', (e) => {
+            if (state.scale > 1.05) {
+                isDragging = true;
+                lastM = { x: e.clientX, y: e.clientY };
+                imgEl.style.cursor = 'grabbing';
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const dx = e.clientX - lastM.x;
+                const dy = e.clientY - lastM.y;
+                state.x += dx;
+                state.y += dy;
+                lastM = { x: e.clientX, y: e.clientY };
+                applyTransform();
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                imgEl.style.cursor = state.scale > 1 ? 'grab' : 'default';
+            }
+        });
+
+        // --- Touch Manager Integration ---
+        const touchManager = new TouchManager(container);
+
+        touchManager.registerGesture('onPinch', (scaleDelta, thresholds) => {
+            // thresholds.frameScale is the delta since last move
+            const midX = (thresholds.pos[0].x + thresholds.pos[1].x) / 2;
+            const midY = (thresholds.pos[0].y + thresholds.pos[1].y) / 2;
+            zoomAt(state.scale * thresholds.frameScale, midX, midY);
+        });
+
+        touchManager.registerGesture('onPan', (dx, dy) => {
+            if (state.scale > 1.05) {
+                state.x += dx;
+                state.y += dy;
+                applyTransform();
+            }
+        });
+
+        // Swipe Down to Close / Navigation
+        let tsX = 0, tsY = 0;
+        container.addEventListener('touchstart', e => {
+            tsX = e.touches[0].clientX;
+            tsY = e.touches[0].clientY;
+        });
+
+        container.addEventListener('touchend', e => {
+            if (state.scale > 1.1) return;
+            const dx = e.changedTouches[0].clientX - tsX;
+            const dy = e.changedTouches[0].clientY - tsY;
+
+            // Swipe Down to close
+            if (dy > 120 && Math.abs(dx) < 60) closeViewer();
+            // Swipes for nav (if not handled by nav-zones)
+            else if (Math.abs(dx) > 80 && Math.abs(dy) < 50) {
+                dx > 0 ? goPrev() : goNext();
+            }
+        });
+
+        // Escape Key
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeViewer();
+            if (e.key === 'ArrowRight') goNext();
+            if (e.key === 'ArrowLeft') goPrev();
+        });
+
+    </script>
+</body>
+
+</html>

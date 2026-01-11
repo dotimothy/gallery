@@ -25,7 +25,8 @@ class App {
         this.isSlideshowActive = false;
         this.slideshowInterval = 3000;
         this.slideshowTimer = null;
-        this.viewerCloseTimer = null; // Prevent race conditions
+        this.slideshowActivityTimer = null;
+        this.viewerCloseTimer = null; // Prevent reliability issues
 
         // Elements
         this.ui = {
@@ -46,6 +47,7 @@ class App {
             lightPollutionClose: document.getElementById('lightPollutionMapCloseButton'),
             lightPollutionIframe: document.getElementById('lightPollutionMapIframe'),
             loadingScreen: document.getElementById('loading-screen'),
+            immersiveFrame: document.getElementById('immersive-frame'), // Added
         };
 
         // Initialize Views
@@ -191,12 +193,18 @@ class App {
         // Slideshow Params
         if (urlParams.has('interval')) {
             const interval = parseInt(urlParams.get('interval'));
-            if (!isNaN(interval) && interval > 500) {
+            if (!isNaN(interval) && interval > 0) {
                 this.settings.set('slideshowInterval', interval / 1000);
             }
         }
         if (urlParams.has('slideshow')) {
             this.startSlideshow();
+        }
+
+        // Fullscreen (Chrome/Kiosk support)
+        // Store flag to trigger on first interaction (opening viewer)
+        if (urlParams.has('fullscreen')) {
+            this.autoFullscreen = true;
         }
     }
 
@@ -431,6 +439,12 @@ class App {
             this.ui.globalFullscreen.onclick = () => this.toggleNativeFullscreen();
         }
 
+        // Monitor Fullscreen State Changes (Esc key, F11, etc.)
+        document.addEventListener('fullscreenchange', () => this.onFullscreenChange());
+        document.addEventListener('webkitfullscreenchange', () => this.onFullscreenChange());
+        document.addEventListener('mozfullscreenchange', () => this.onFullscreenChange());
+        document.addEventListener('msfullscreenchange', () => this.onFullscreenChange());
+
         // Slideshow Toggle
         if (this.ui.btnSlideshow) {
             this.ui.btnSlideshow.onclick = () => this.toggleSlideshow();
@@ -480,12 +494,22 @@ class App {
 
         // Touch Swipe
         document.addEventListener('touchstart', (e) => {
+            if (this.isSlideshowActive) this.resetSlideshowActivityTimer();
             this.touchStartX = e.changedTouches[0].screenX;
         }, { passive: false });
 
         document.addEventListener('touchend', (e) => {
+            if (this.isSlideshowActive) this.resetSlideshowActivityTimer();
             this.touchEndX = e.changedTouches[0].screenX;
             this.handleSwipe();
+        });
+
+        // Activity Monitor for Slideshow
+        document.addEventListener('mousemove', () => {
+            if (this.isSlideshowActive) this.resetSlideshowActivityTimer();
+        });
+        document.addEventListener('click', () => {
+            if (this.isSlideshowActive) this.resetSlideshowActivityTimer();
         });
 
         // Metadata Toggles
@@ -569,6 +593,20 @@ class App {
                 document.getElementById('set-interval').value = this.settings.get('slideshowInterval');
             };
         }
+        // Listen for messages from Independent Viewer
+        window.addEventListener('message', (e) => {
+            if (e.data.action === 'close') {
+                this.closeFullscreen();
+            } else if (e.data.action === 'next') {
+                this.next(true); // Determine next index -> update iframe
+            } else if (e.data.action === 'prev') {
+                this.prev();
+            } else if (e.data.action === 'startSlideshow') {
+                if (!this.isSlideshowActive) this.startSlideshow();
+            } else if (e.data.action === 'stopSlideshow') {
+                if (this.isSlideshowActive) this.stopSlideshow();
+            }
+        });
     }
 
     handleSwipe() {
@@ -588,10 +626,6 @@ class App {
 
     switchMode(newMode) {
         // ALWAYS close fullscreen/viewer when switching modes.
-        // This ensures:
-        // 1. Image is deselected (Request 1)
-        // 2. Transparent overlays are removed so buttons work again (Request 2)
-        // 3. Top controls are re-enabled
         this.closeFullscreen();
 
         this.mode = newMode;
@@ -599,20 +633,15 @@ class App {
 
         if (newMode === '3D') {
             this.view2d.hide();
-            this.view3d.show();
-            this.view3d.resize(); // Ensure canvas size is correct
+            this.view3d.show(); // This calls resumeRendering() internal to View3D
+            this.view3d.resize();
 
-            // Arrows are managed by closeFullscreen (hidden by default), 
-            // but for 3D globe we definitely want them hidden initially.
             this.ui.leftArrow.hidden = true;
             this.ui.rightArrow.hidden = true;
         } else {
-            this.view3d.hide();
+            this.view3d.hide(); // This calls pauseRendering() internal to View3D
             this.view2d.show();
-            // Don't scroll to current index. Let user start fresh or stay where they were.
-            // this.view2d.goToIndex(this.currentIndex); 
 
-            // Ensure arrows are hidden in grid view
             this.ui.leftArrow.hidden = true;
             this.ui.rightArrow.hidden = true;
         }
@@ -728,6 +757,19 @@ class App {
         // Ensure viewer is open AND update state (hide arrows, zoom 3D)
         this.selectImage(this.currentIndex, true);
 
+        // Hide Thumbs for Slideshow
+        const thumbs = document.getElementById('thumbnail-selector');
+        if (thumbs) thumbs.classList.add('hidden');
+
+        // Start Activity Timer to hide controls
+        this.resetSlideshowActivityTimer();
+
+        // IMMEDIATE FADE: Override the default 3s timer for the initial start
+        if (this.slideshowActivityTimer) clearTimeout(this.slideshowActivityTimer);
+        this.slideshowActivityTimer = setTimeout(() => {
+            if (this.isSlideshowActive) this.toggleControlsVisibility(false);
+        }, 500);
+
         this.slideshowTimer = setInterval(() => {
             // Keep viewer open if slideshow is running
             this.next(true);
@@ -744,6 +786,13 @@ class App {
             this.slideshowTimer = null;
         }
 
+        if (this.slideshowActivityTimer) {
+            clearTimeout(this.slideshowActivityTimer);
+            this.slideshowActivityTimer = null;
+        }
+
+        // Ensure controls are visible when stopping
+        this.toggleControlsVisibility(true);
 
         if (this.ui.viewerSlideshow) {
             this.ui.viewerSlideshow.innerText = '▶️';
@@ -752,6 +801,39 @@ class App {
 
         // Restore UI state (Arrows, standard zoom)
         this.selectImage(this.currentIndex, true);
+
+        // Restore Thumbs
+        const thumbs = document.getElementById('thumbnail-selector');
+        if (thumbs) thumbs.classList.remove('hidden');
+    }
+
+    resetSlideshowActivityTimer() {
+        this.toggleControlsVisibility(true);
+        if (this.slideshowActivityTimer) clearTimeout(this.slideshowActivityTimer);
+
+        this.slideshowActivityTimer = setTimeout(() => {
+            if (this.isSlideshowActive) {
+                this.toggleControlsVisibility(false);
+            }
+        }, 3000);
+    }
+
+    toggleControlsVisibility(show) {
+        const controls = [
+            this.ui.imageViewer.querySelector('#viewer-controls'),
+            this.ui.leftArrow,
+            this.ui.rightArrow,
+            // Add top controls too if they are visible? Usually viewer covers them.
+        ];
+
+        controls.forEach(el => {
+            if (!el) return;
+            if (show) el.classList.remove('fade-out');
+            else el.classList.add('fade-out');
+        });
+
+        // Also hide/show cursor?
+        this.ui.imageViewer.style.cursor = show ? 'auto' : 'none';
     }
 
     // --- Metadata Logic ---
@@ -842,125 +924,154 @@ class App {
         this.ui.metadataViewer.classList.toggle('visible');
     }
 
-    openFullscreenViewer(index, direction = 0) {
-        // Cancel any pending close animation to prevent race conditions
+    activateImmersiveViewer(index) {
+        const iframe = this.ui.immersiveFrame;
+        if (!iframe) return;
+
+        // Global UI remains visible via z-index in unified mode
+
+        // Show Iframe Container
+        iframe.classList.remove('hidden');
+        iframe.style.display = 'block';
+
+        // Construct URL
+        const imgName = this.images[index];
+        const dir = this.useDataSaver ? 'thumbs' : 'fulls';
+
+        let nextIdx = index + 1;
+        if (nextIdx >= this.images.length) nextIdx = 0;
+        let prevIdx = index - 1;
+        if (prevIdx < 0) prevIdx = this.images.length - 1;
+
+        const mainPath = `./${dir}/${imgName}.jpg`;
+        const nextPath = `./${dir}/${this.images[nextIdx]}.jpg`;
+        const prevPath = `./${dir}/${this.images[prevIdx]}.jpg`;
+
+        let url = `immersive.html?img=${encodeURIComponent(mainPath)}`;
+        url += `&next=${encodeURIComponent(nextPath)}`;
+        url += `&prev=${encodeURIComponent(prevPath)}`;
+
+        if (this.isSlideshowActive) {
+            url += `&slideshow=1`;
+            url += `&interval=${this.slideshowInterval}`;
+        }
+
+        if (this.metadata[imgName]) {
+            const m = this.metadata[imgName];
+            if (m['Image DateTime']) url += `&meta_date=${encodeURIComponent(m['Image DateTime'])}`;
+            if (m['Image Model']) url += `&meta_model=${encodeURIComponent(m['Image Model'])}`;
+            if (m['EXIF ISOSpeedRatings']) url += `&meta_iso=${encodeURIComponent(m['EXIF ISOSpeedRatings'])}`;
+            if (m['EXIF ExposureTime']) url += `&meta_shutter=${encodeURIComponent(m['EXIF ExposureTime'])}`;
+            if (m['EXIF FNumber']) url += `&meta_fstop=${encodeURIComponent(m['EXIF FNumber'])}`;
+        }
+
+        // Update if different (prevents reloading if just showing/hiding, but we usually want to update state)
+        if (iframe.contentWindow && iframe.src.indexOf(url) === -1) {
+            iframe.src = url;
+            iframe.contentWindow.focus();
+        } else {
+            iframe.contentWindow.focus();
+        }
+    }
+
+    async openFullscreenViewer(index, direction = 0) {
         if (this.viewerCloseTimer) {
             clearTimeout(this.viewerCloseTimer);
             this.viewerCloseTimer = null;
         }
 
-        this.log(`Opening Viewer for Idx:${index} Dir:${direction}`);
+        this.log(`Opening Viewer Idx:${index} Mode:${this.mode}`);
 
-        // Transition to PREVIEW state
-        if (this.viewState.getState() === 'explore') {
-            this.viewState.transition('preview');
+        // Auto-Fullscreen Trigger (User Gesture)
+        if (this.autoFullscreen) {
+            try {
+                const el = document.documentElement;
+                if (!document.fullscreenElement) {
+                    // Try to wait for fullscreen to engage before transitioning
+                    // This reduces jank/flicker as the browser resizes the window.
+                    if (el.requestFullscreen) await el.requestFullscreen();
+                    else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+                    else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+
+                    // Small buffer to allow resize events to propagate
+                    await new Promise(r => setTimeout(r, 100));
+                }
+            } catch (e) {
+                console.warn("Fullscreen trigger failed:", e);
+            }
         }
 
-        const imgName = this.images[index];
-        // Note: 'dir' (thumbs/fulls) is unused here as mountActiveImage defaults to fulls, 
-        // but keeping variable definition to match original structure logic.
-        const dir = this.useDataSaver ? 'thumbs' : 'fulls';
-
-        // 1. Manage Metadata Button
-        if (this.ui.toggleMetadata) {
-            this.ui.toggleMetadata.classList.remove('hidden');
-            this.ui.toggleMetadata.style.display = 'block';
-            this.ui.toggleMetadata.onclick = (e) => {
-                e.stopPropagation();
-                this.toggleMetadata();
-            };
-        }
-
-        // Hide Global Top Controls to prevent overlap
-        if (this.ui.topControls) this.ui.topControls.style.opacity = '0';
-        if (this.ui.topControls) this.ui.topControls.style.pointerEvents = 'none';
-
-        // Hide Title to prevent overlap
-        if (this.ui.title) this.ui.title.style.opacity = '0';
-
-        const container = this.ui.fullImageContainer;
-
-        // --- 3D MODE: SPECIAL CAROUSEL VIEW ---
         if (this.mode === '3D') {
-            // FIX 1: If in Magnifier (Detail) mode, update DOM image instead of clearing it
-            if (this.viewState.getState() === 'detail') {
-                this.mountActiveImage(index, direction);
-            } else {
-                // Standard Preview: Clear DOM to let 3D Canvas show through
-                container.innerHTML = '';
+            // 3D Preview Mode (Line View)
+            // Ensure Iframe is HIDDEN
+            const iframe = this.ui.immersiveFrame;
+            if (iframe) {
+                iframe.classList.add('hidden');
+                iframe.style.display = 'none';
             }
 
-            // Trigger 3D Transition
-            this.view3d.enterLineView(index);
+            // Ensure 3D Canvas is VISIBLE
+            document.getElementById('gallery-3d').style.display = 'block';
+            this.view3d.resumeRendering();
 
-            // Show UI Overlays
-            this.updateMetadata(index);
+            // Transition State
+            if (this.viewState.getState() !== 'preview') {
+                this.viewState.transition('preview');
+            }
+            this.view3d.enterLineView(index);
+            // Hide Global Top Controls to prevent overlap
+            if (this.ui.topControls) {
+                this.ui.topControls.style.opacity = '0';
+                this.ui.topControls.style.pointerEvents = 'none';
+            }
+            if (this.ui.title) this.ui.title.style.opacity = '0';
+
+            // Show DOM Controls (Arrows, Zoom Btn) BUT CLEAR IMAGE
+            this.ui.fullImageContainer.innerHTML = '';
             this.ui.imageViewer.hidden = false;
             this.ui.imageViewer.classList.add('visible');
-            this.ui.imageViewer.classList.add('transparent');
+            this.ui.imageViewer.classList.add('transparent'); // Let 3D show through
 
-            // Show Arrows (Only if not slideshow)
-            if (!this.isSlideshowActive) {
-                this.ui.leftArrow.hidden = false;
-                this.ui.rightArrow.hidden = false;
-            } else {
-                this.ui.leftArrow.hidden = true;
-                this.ui.rightArrow.hidden = true;
-            }
-
-            // RESET UI STATE
+            // Ensure Zoom button is "Magnify"
             const zoomBtn = document.getElementById('zoomBtn');
-            // If in detail mode, ensure button shows "Back"
-            if (this.viewState.getState() === 'detail' && zoomBtn) {
-                zoomBtn.innerText = '🔙';
-                zoomBtn.title = 'Return to Preview';
-            } else if (zoomBtn) {
-                zoomBtn.innerText = '🔍';
-                zoomBtn.title = 'Zoom / Magnify';
-            }
+            if (zoomBtn) { zoomBtn.innerText = '🔍'; zoomBtn.title = 'Magnify'; }
 
-            // Update Thumb Palette
-            if (!this.thumbnailsCreated) {
-                this.createThumbSelector();
-                this.thumbnailsCreated = true;
-            }
+            // Metadata & Thumbs
+            this.updateMetadata(index);
+            if (!this.thumbnailsCreated) { this.createThumbSelector(); this.thumbnailsCreated = true; }
             this.updateThumbSelector(index);
 
-            const thumbs = document.getElementById('thumbnail-selector');
-            if (thumbs && this.isSlideshowActive) {
-                thumbs.classList.add('hidden');
-            }
-            return;
-        }
-
-        // --- 2D MODE: STANDARD DOM VIEWER ---
-        this.ui.imageViewer.hidden = false;
-        this.ui.imageViewer.classList.remove('transparent'); // Ensure black bg for 2D
-
-        // FIX 2: Explicitly show the container. It is hidden by default in the "Explore" hook cleanup.
-        this.ui.fullImageContainer.style.display = 'flex';
-
-        // Show Arrows for navigation (Only if not slideshow)
-        if (!this.isSlideshowActive) {
-            this.ui.leftArrow.hidden = false;
-            this.ui.rightArrow.hidden = false;
         } else {
-            this.ui.leftArrow.hidden = true;
-            this.ui.rightArrow.hidden = true;
-        }
+            // 2D Mode -> Use Legacy Viewer (NOT IMMERSIVE FRAME)
+            // Ensure 3D is hidden/paused
+            this.view3d.pauseRendering();
+            // Hide Global UI
+            if (this.ui.topControls) {
+                this.ui.topControls.style.opacity = '0';
+                this.ui.topControls.style.pointerEvents = 'none';
+            }
+            if (this.ui.title) this.ui.title.style.opacity = '0';
 
-        this.mountActiveImage(index, direction);
+            // Ensure Iframe is hidden
+            if (this.ui.immersiveFrame) {
+                this.ui.immersiveFrame.classList.add('hidden');
+                this.ui.immersiveFrame.style.display = 'none';
+            }
 
-        // Toggle Thumbs visibility for slideshow
-        const thumbs = document.getElementById('thumbnail-selector');
-        if (thumbs) {
-            if (this.isSlideshowActive) thumbs.classList.add('hidden');
-        }
-
-        // Fade In Viewer
-        requestAnimationFrame(() => {
+            // Show Legacy Viewer
+            this.ui.imageViewer.hidden = false;
             this.ui.imageViewer.classList.add('visible');
-        });
+            this.ui.imageViewer.classList.remove('transparent'); // Solid background
+            this.ui.fullImageContainer.style.display = 'flex';
+
+            // Metadata & Thumbs
+            this.updateMetadata(index);
+            if (!this.thumbnailsCreated) { this.createThumbSelector(); this.thumbnailsCreated = true; }
+            this.updateThumbSelector(index);
+
+            // Mount Image
+            this.mountActiveImage(index, direction);
+        }
     }
 
     mountActiveImage(index, direction = 0) {
@@ -1243,26 +1354,62 @@ class App {
         // --- 8. MOUNT & SET SRC ---
         container.appendChild(newImg);
         container.appendChild(overlay);
-        newImg.src = `./fulls/${imgName}.jpg`;
+
+        // Datasaver Logic
+        const dir = this.useDataSaver ? 'thumbs' : 'fulls';
+        newImg.src = `./${dir}/${imgName}.jpg`;
     }
 
-
     toggleMagnifier() {
-        this.log(`toggleMagnifier called. Current state: ${this.viewState.getState()}`);
-
         if (this.mode === '3D') {
             const currentState = this.viewState.getState();
+            if (currentState === 'preview') {
+                // Enter DETAIL (Immersive Iframe)
+                this.viewState.transition('detail');
 
-            if (currentState === 'detail') {
+                // Hide 3D, Show Iframe
+                this.view3d.pauseRendering();
+                document.getElementById('gallery-3d').style.display = 'none';
+
+                this.activateImmersiveViewer(this.currentIndex);
+
+                // Ensure viewer controls container is visible on top of iframe
+                this.ui.imageViewer.hidden = false;
+                this.ui.imageViewer.classList.add('visible');
+                this.ui.imageViewer.classList.add('transparent');
+
+
+                // Thumbs and Arrows stay visible in Unified mode (via z-index)
+
+
+            } else if (currentState === 'detail') {
                 // Exit DETAIL -> PREVIEW
                 this.viewState.transition('preview');
-            } else if (currentState === 'preview') {
-                // Enter PREVIEW -> DETAIL
-                this.mountActiveImage(this.currentIndex, 0);
-                this.viewState.transition('detail');
+
+                // Hide Iframe, Show 3D
+                this.ui.immersiveFrame.classList.add('hidden');
+                this.ui.immersiveFrame.style.display = 'none';
+
+                document.getElementById('gallery-3d').style.display = 'block';
+                this.view3d.resumeRendering();
+
+                const zoomBtn = document.getElementById('zoomBtn');
+                if (zoomBtn) zoomBtn.innerText = '🔍';
+
+                // Show Thumbs
+                const thumbs = document.getElementById('thumbnail-selector');
+                if (thumbs) thumbs.classList.remove('hidden');
+
+                // Restore Global Arrows (if not slideshow)
+                if (!this.isSlideshowActive) {
+                    this.ui.leftArrow.style.display = 'block';
+                    this.ui.rightArrow.style.display = 'block';
+                    this.ui.leftArrow.hidden = false; // Cleanup
+                    this.ui.rightArrow.hidden = false;
+                }
             }
         } else {
-            // 2D Mode: Use the explicit toggle handler if available
+            // 2D Mode: Use the explicit toggle handler if available (Legacy)
             const btn = document.getElementById('zoomBtn');
             const thumbs = document.getElementById('thumbnail-selector');
 
@@ -1295,19 +1442,55 @@ class App {
                         this.ui.rightArrow.hidden = false;
                     }
                 }
-            } else {
-                // Fallback (Shouldn't happen if initialized correctly)
-                console.warn("toggleZoom handler not found");
-                const evt = new MouseEvent('dblclick', { bubbles: true, cancelable: true });
-                this.ui.fullImageContainer.dispatchEvent(evt);
             }
         }
     }
 
+    closeFullscreen() {
+        // Stop Slideshow
+        if (this.isSlideshowActive) this.stopSlideshow();
 
+        // Hide Iframe
+        const iframe = this.ui.immersiveFrame;
+        if (iframe) {
+            iframe.classList.add('hidden');
+            iframe.style.display = 'none';
+            // Reset src to stop video/memory? Optional.
+            iframe.src = 'about:blank';
+        }
+
+        // Hide Legacy Viewer
+        this.ui.imageViewer.classList.remove('visible');
+        this.ui.imageViewer.hidden = true;
+        this.ui.fullImageContainer.innerHTML = '';
+        this.ui.fullImageContainer.style.display = 'none';
+
+        // Close Metadata
+        this.ui.metadataViewer.classList.remove('visible');
+
+        if (this.mode === '3D' && this.viewState.getState() === 'detail') {
+            this.toggleMagnifier();
+        }
+
+        this.viewState.transition('explore');
+
+        if (this.mode === '3D') {
+            document.getElementById('gallery-3d').style.display = 'block';
+            this.view3d.resumeRendering();
+        }
+
+        // Restore Global Top Controls
+        if (this.ui.topControls) {
+            this.ui.topControls.style.opacity = '1';
+            this.ui.topControls.style.pointerEvents = 'auto';
+            this.ui.topControls.style.visibility = 'visible';
+        }
+        if (this.ui.title) this.ui.title.style.opacity = '0.9';
+    }
 
     createThumbSelector() {
         const container = document.getElementById('thumbnail-selector');
+        if (!container) return;
         container.innerHTML = '';
         this.images.forEach((imgName, i) => {
             const img = document.createElement('img');
@@ -1322,44 +1505,24 @@ class App {
         });
 
         // Bind Toggle Button
-        document.getElementById('toggleThumbs').onclick = (e) => {
-            e.stopPropagation();
-            container.classList.toggle('hidden');
-        };
+        const toggleBtn = document.getElementById('toggleThumbs');
+        if (toggleBtn) {
+            toggleBtn.onclick = (e) => {
+                e.stopPropagation();
+                container.classList.toggle('hidden');
+            };
+        }
     }
 
     updateThumbSelector(index) {
         const container = document.getElementById('thumbnail-selector');
+        if (!container) return;
         const thumbs = container.querySelectorAll('.thumb-small');
         thumbs.forEach(t => t.classList.remove('active'));
         if (thumbs[index]) {
             thumbs[index].classList.add('active');
             thumbs[index].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
         }
-    }
-
-    closeFullscreen() {
-        // Stop Slideshow
-        if (this.isSlideshowActive) {
-            this.stopSlideshow();
-        }
-
-        // Close Metadata (Always)
-        this.ui.metadataViewer.classList.remove('visible');
-
-        // Transition to EXPLORE state (handles all cleanup via hooks)
-        this.viewState.transition('explore');
-
-        // Restore Global Top Controls
-        // Ensure we force these back to interactive state
-        if (this.ui.topControls) {
-            this.ui.topControls.style.opacity = '1';
-            this.ui.topControls.style.pointerEvents = 'auto';
-            this.ui.topControls.style.visibility = 'visible'; // JIC
-        }
-
-        // Restore Title
-        if (this.ui.title) this.ui.title.style.opacity = '0.9'; // Default opacity
     }
 
     toggleNativeFullscreen() {
@@ -1377,13 +1540,20 @@ class App {
         }
     }
 
-    updateFullscreenButtonState() {
-        const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
-        const icon = isFullscreen ? '✖️' : '⛶'; // Use X for exit, or resize icon
-        // Or better: Use "Compress" icon for exit: ↙️ or similar. Let's stick to simple change or just keeping it static if ambiguous.
-        // Actually, let's keep it static '⛶' for now as '✖️' might be confused with "Close Viewer".
-        // Instead, just ensure the functionality works.
-        // If user specifically asked "Make sure it works", robustness is key.
+    onFullscreenChange() {
+        const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+
+        // Update Toggle Icon
+        if (this.ui.globalFullscreen) {
+            this.ui.globalFullscreen.innerText = isFullscreen ? '🗗' : '⛶';
+            this.ui.globalFullscreen.title = isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen';
+        }
+
+        // Feature: Auto-close viewer on fullscreen exit (User Request)
+        // If we just exited fullscreen, close the viewer experience to sync states.
+        if (!isFullscreen) {
+            this.closeFullscreen();
+        }
     }
 
     // --- Light Pollution Map ---

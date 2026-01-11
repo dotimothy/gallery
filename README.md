@@ -63,6 +63,17 @@ When an image is selected:
 *   `F`: Toggle Fullscreen.
 *   `T`: Toggle Thumbnails.
 
+### URL Parameters 🔗
+Customize the gallery experience using query parameters. Append these to your URL (e.g., `?mode=2d&slideshow`):
+
+*   `?datasaver`: **Data Saver Mode**. Loads lower-resolution thumbnails instead of full-sized images. Ideal for slow connections.
+*   `?mode=2d`: Starts the gallery in **2D Grid View** instead of the default 3D Sphere.
+*   `?slideshow`: Automatically starts the slideshow upon loading.
+*   `?interval=3000`: Sets the slideshow speed in milliseconds (default is 3000ms).
+*   `?img=filename`: Deep link to specific image. Opens the gallery with `filename.jpg` selected.
+*   `?fullscreen`: Automatically enters fullscreen mode **every time** an image is opened. Exiting fullscreen (e.g., via `Esc`) will also close the image viewer.
+*   `?debug`: Enables verbose logging in the browser console.
+
 ---
 
 ## Example Portfolios using gallery

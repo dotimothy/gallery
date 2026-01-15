@@ -446,9 +446,14 @@ button {
 /* Mobile Enhancements */
 @media (max-width: 768px) {
 
-    /* Hide FPS counter on mobile to save space */
+    /* Force visible if users want to see performance */
     #fps-counter {
-        display: none !important;
+        display: block !important;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 4px 8px;
+        border-radius: 4px;
+        top: max(10px, env(safe-area-inset-top));
+        left: 10px;
     }
 
     /* Hide Nav Arrows on mobile (Swipe is primary) */

@@ -7,7 +7,8 @@ export class SettingsManager {
             sphereSpacing: 2.0,   // 1.0 - 15.0
             particleCount: 50000, // 0 - 50000
             gridColumns: 5,        // 1 - 10
-            slideshowInterval: 3.0 // Seconds
+            slideshowInterval: 3.0, // Seconds
+            sensitivity: 1.0       // 1.0 - 10.0
         };
 
         const mobileDefaults = {
@@ -15,7 +16,8 @@ export class SettingsManager {
             sphereSpacing: 1.0,   // 1.0 - 15.0
             particleCount: 25000,  // Reduced for mobile GPU
             gridColumns: 2,       // 1 - 10
-            slideshowInterval: 3.0 // Seconds
+            slideshowInterval: 3.0, // Seconds
+            sensitivity: 5.0       // 1.0 - 10.0
         };
 
         this.defaults = isMobile ? mobileDefaults : desktopDefaults;

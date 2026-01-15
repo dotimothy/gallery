@@ -19,6 +19,7 @@ export class TouchManager {
 
         this.gestures = {
             onTap: null,
+            onDoubleTap: null,
             onPinch: null,
             onPan: null,
             onPullDown: null
@@ -173,8 +174,20 @@ export class TouchManager {
         const duration = Date.now() - this.touches.startTime;
 
         if (!this.isPanning && !this.isPullingDown && duration < this.tapTimeout && this.touches.start.length === 1) {
-            if (this.gestures.onTap) {
-                this.gestures.onTap(this.touches.start[0]);
+            const now = Date.now();
+            const lastTap = this.lastTapTime || 0;
+            const timeSinceLastTap = now - lastTap;
+
+            if (timeSinceLastTap < 300) { // Double Tap
+                if (this.gestures.onDoubleTap) {
+                    this.gestures.onDoubleTap(this.touches.start[0].x, this.touches.start[0].y);
+                }
+                this.lastTapTime = 0; // Reset
+            } else {
+                if (this.gestures.onTap) {
+                    this.gestures.onTap(this.touches.start[0]);
+                }
+                this.lastTapTime = now;
             }
         }
     }

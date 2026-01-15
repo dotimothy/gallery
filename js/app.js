@@ -278,7 +278,7 @@ class App {
 
     applySetting(key, value) {
         // Update view logic
-        if (key === 'resolution' || key === 'sphereSpacing' || key === 'particleCount') {
+        if (key === 'resolution' || key === 'sphereSpacing' || key === 'particleCount' || key === 'sensitivity') {
             this.view3d.updateSettings(key, value);
         }
         if (key === 'gridColumns') {
@@ -299,7 +299,8 @@ class App {
             'sphereSpacing': { id: 'disp-sphere', suffix: '' },
             'particleCount': { id: 'disp-particles', suffix: '' },
             'gridColumns': { id: 'disp-grid', suffix: '' },
-            'slideshowInterval': { id: 'disp-interval', suffix: 's' }
+            'slideshowInterval': { id: 'disp-interval', suffix: 's' },
+            'sensitivity': { id: 'disp-sensitivity', suffix: 'x' }
         };
 
         if (displayMap[key]) {
@@ -312,7 +313,7 @@ class App {
 
     applyAllSettings() {
         // Sync all settings from manager to views
-        const keys = ['resolution', 'sphereSpacing', 'particleCount', 'gridColumns', 'slideshowInterval'];
+        const keys = ['resolution', 'sphereSpacing', 'particleCount', 'gridColumns', 'slideshowInterval', 'sensitivity'];
         keys.forEach(k => this.applySetting(k, this.settings.get(k)));
     }
 
@@ -581,6 +582,7 @@ class App {
         bindInput('set-particles', 'particleCount', false);
         bindInput('set-grid', 'gridColumns', false);
         bindInput('set-interval', 'slideshowInterval', true);
+        bindInput('set-sensitivity', 'sensitivity', true);
 
         if (resetSettings) {
             resetSettings.onclick = () => {
@@ -615,7 +617,7 @@ class App {
         if (this.ui.imageViewer.hidden) return;
 
         // 2. Block navigation ONLY if specifically zoomed in (panning)
-        // This allows swiping between images even in Magnifier mode if at 1x zoom.
+        if (this.viewState.getState() === 'detail') return;
         if (this.ui.fullImageContainer.isZoomed && this.ui.fullImageContainer.isZoomed()) return;
 
         if (Math.abs(this.touchStartX - this.touchEndX) > this.swipeThresh) {
@@ -647,13 +649,11 @@ class App {
         }
     }
 
-    // Updated selectImage to calculate direction
     selectImage(index, openViewer = false, direction = 0) {
-        if (this.mode === '3D' && this.viewState.getState() === 'detail') {
-            this.viewState.transition('preview');
-        }
+        // If we are already in detail mode, stay there and update the content
+        const isDetail = this.viewState.getState() === 'detail';
 
-        this.log(`selectImage Idx:${index} Open:${openViewer}`);
+        this.log(`selectImage Idx:${index} Open:${openViewer} Detail:${isDetail}`);
         if (index < 0 || index >= this.images.length) return;
 
         // Infer direction if not explicitly given and we are close
@@ -1002,8 +1002,16 @@ class App {
         }
 
         if (this.mode === '3D') {
+            const isDetail = this.viewState.getState() === 'detail';
+
+            if (isDetail) {
+                this.activateImmersiveViewer(index);
+                this.updateMetadata(index);
+                this.updateThumbSelector(index);
+                return;
+            }
+
             // 3D Preview Mode (Line View)
-            // Ensure Iframe is HIDDEN
             const iframe = this.ui.immersiveFrame;
             if (iframe) {
                 iframe.classList.add('hidden');
@@ -1269,7 +1277,7 @@ class App {
 
         touchManager.registerGesture('onPinch', (scale, thresholds) => {
             const currentState = this.viewState.getState();
-            if (this.mode === '3D' && currentState === 'preview' && scale > thresholds.enterThreshold) {
+            if (this.mode === '3D' && currentState === 'preview' && scale > thresholds.enterThreshold && !this.isMobile) {
                 this.viewState.transition('detail');
             }
 
@@ -1314,13 +1322,22 @@ class App {
                 newImg.style.transform = `translate(0, ${totalY * 0.5}px) scale(${scale})`;
                 container.style.backgroundColor = `rgba(0,0,0,${0.9 * (1 - progress)})`;
             } else if (state === 'end') {
-                if (totalY > 120) {
+                if (totalY > 120 && !this.isMobile) {
                     this.viewState.transition('explore');
                 } else {
                     newImg.style.transition = 'transform 0.3s ease-out';
                     newImg.style.transform = 'translate(0,0) scale(1)';
                     container.style.backgroundColor = 'rgba(0,0,0,0.9)';
                 }
+            }
+        });
+
+        touchManager.registerGesture('onTap', () => {
+            const currentState = this.viewState.getState();
+            if (this.mode === '3D' && currentState === 'preview') {
+                this.viewState.transition('detail');
+            } else if (this.mode === '2D' && currentState === 'preview') {
+                this.toggleMagnifier();
             }
         });
 
@@ -1361,8 +1378,8 @@ class App {
     }
 
     toggleMagnifier() {
+        const currentState = this.viewState.getState();
         if (this.mode === '3D') {
-            const currentState = this.viewState.getState();
             if (currentState === 'preview') {
                 // Enter DETAIL (Immersive Iframe)
                 this.viewState.transition('detail');

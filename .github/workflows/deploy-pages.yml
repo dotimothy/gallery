@@ -43,6 +43,7 @@ jobs:
         run: |
           mkdir _site
           cp index.html _site/
+          cp immersive.html _site/
           cp -r css _site/
           cp -r js _site/
           cp -r fulls _site/

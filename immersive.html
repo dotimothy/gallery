@@ -110,74 +110,6 @@
                 transform: translate(-50%, -50%) rotate(360deg);
             }
         }
-
-        #metadataOverlay {
-            position: fixed;
-            bottom: 0px;
-            left: 0;
-            width: 100%;
-            padding: 20px 20px 100px 20px;
-            background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0));
-            color: #eee;
-            pointer-events: none;
-            opacity: 0;
-            transform: translateY(20px);
-            transition: opacity 0.3s, transform 0.3s;
-            z-index: 90;
-        }
-
-        #metadataOverlay.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        #metadataOverlay h2 {
-            margin: 0 0 5px 0;
-            font-size: 1.4em;
-            font-weight: 300;
-        }
-
-        #metadataOverlay p {
-            margin: 2px 0;
-            font-size: 0.9em;
-            opacity: 0.8;
-        }
-
-        .nav-zone {
-            position: fixed;
-            top: 10%;
-            height: 80%;
-            width: 15%;
-            z-index: 80;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-
-        .nav-zone:hover {
-            opacity: 1;
-        }
-
-        #nav-left {
-            left: 0;
-        }
-
-        #nav-right {
-            right: 0;
-        }
-
-        .zone-arrow {
-            font-size: 3em;
-            color: rgba(255, 255, 255, 0.5);
-            text-shadow: 0 0 10px black;
-        }
-
-        .hidden {
-            display: none !important;
-        }
     </style>
 </head>
 
@@ -188,16 +120,13 @@
         <img id="image" draggable="false" />
     </div>
 
-    <div id="nav-left" class="nav-zone"></div>
-    <div id="nav-right" class="nav-zone"></div>
-
     <script type="module">
         import { TouchManager } from './js/TouchManager.js';
 
         const params = new URLSearchParams(window.location.search);
-        const imgSrc = params.get('img');
-        const nextSrc = params.get('next');
-        const prevSrc = params.get('prev');
+        let imgSrc = params.get('img');
+        let nextSrc = params.get('next');
+        let prevSrc = params.get('prev');
         const interval = parseInt(params.get('interval') || '3000');
         const isSlideshow = params.has('slideshow');
 
@@ -216,14 +145,17 @@
 
         const config = {
             minScale: 1,
-            maxScale: 6,
+            maxScale: 10,
             zoomStep: 0.1,
             doubleTapScale: 3
         };
 
         // --- Initialization ---
-        if (imgSrc) {
-            imgEl.src = imgSrc;
+        function loadContent(src) {
+            if (!src) return;
+            loader.style.display = 'block';
+            imgEl.style.opacity = '0';
+            imgEl.src = src;
             imgEl.onload = () => {
                 loader.style.display = 'none';
                 imgEl.style.opacity = '1';
@@ -231,11 +163,9 @@
                 preload(nextSrc);
                 preload(prevSrc);
             };
-            imgEl.onerror = () => {
-                loader.style.display = 'none';
-                console.error('Failed to load image:', imgSrc);
-            };
         }
+
+        loadContent(imgSrc);
 
         function preload(url) {
             if (!url) return;
@@ -244,24 +174,28 @@
             document.head.appendChild(link);
         }
 
+
+
         // --- Navigation Logic ---
-        function goNext() {
-            if (window.parent) window.parent.postMessage({ action: 'next' }, '*');
-        }
-        function goPrev() {
-            if (window.parent) window.parent.postMessage({ action: 'prev' }, '*');
-        }
-        function closeViewer() {
-            if (window.parent) window.parent.postMessage({ action: 'close' }, '*');
-        }
+        function goNext() { if (window.parent) window.parent.postMessage({ action: 'next' }, '*'); }
+        function goPrev() { if (window.parent) window.parent.postMessage({ action: 'prev' }, '*'); }
+        function closeViewer() { if (window.parent) window.parent.postMessage({ action: 'close' }, '*'); }
+
+        window.addEventListener('message', (e) => {
+            if (e.data.action === 'update') {
+                imgSrc = e.data.img;
+                nextSrc = e.data.next;
+                prevSrc = e.data.prev;
+                loadContent(imgSrc);
+            }
+        });
 
         if (isSlideshow && nextSrc) {
-            setInterval(goNext, Math.max(1, interval));
+            setInterval(goNext, Math.max(1000, interval));
         }
 
-        // --- Zoom at Pointer Math ---
+        // --- Zoom Logic ---
         function zoomAt(targetScale, pointerX, pointerY) {
-            // Constrain scale
             const newScale = Math.max(config.minScale, Math.min(config.maxScale, targetScale));
             const oldScale = state.scale;
             state.scale = newScale;
@@ -271,145 +205,79 @@
                 return;
             }
 
-            // Adjust x/y so the point under pointer stays fixed
-            // Formula: nextPos = pointer - (pointer - currentPos) * (nextScale / currentScale)
-            // But since we are centered by flex, currentPos is effectively container center.
             const rect = container.getBoundingClientRect();
             const centerX = rect.width / 2;
             const centerY = rect.height / 2;
-
             const relX = pointerX - centerX - state.x;
             const relY = pointerY - centerY - state.y;
-
             const ratio = newScale / oldScale;
             state.x -= relX * (ratio - 1);
             state.y -= relY * (ratio - 1);
-
             state.isZoomed = true;
             applyTransform();
         }
 
         function applyTransform() {
-            // Bounded Panning: Keep image edges within view if smaller than screen, 
-            // OR keep edges touching screen if larger.
-            const rect = imgEl.getBoundingClientRect();
             const viewW = container.clientWidth;
             const viewH = container.clientHeight;
-
-            // Half dimensions of the scaled image
-            const hw = (imgEl.naturalWidth * (imgEl.offsetHeight / imgEl.naturalHeight) * state.scale) / 2 || (viewW * state.scale) / 2;
-            const hh = (viewH * state.scale) / 2;
-
-            // Bound logic: 
-            // If image is wider than view, X can move between +/- (imageW - viewW)/2
             const limitX = Math.max(0, (viewW * state.scale - viewW) / 2);
             const limitY = Math.max(0, (viewH * state.scale - viewH) / 2);
-
             state.x = Math.max(-limitX, Math.min(limitX, state.x));
             state.y = Math.max(-limitY, Math.min(limitY, state.y));
-
             imgEl.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
-            imgEl.style.cursor = state.scale > 1 ? 'grab' : 'default';
         }
 
         function resetTransform() {
-            state = { scale: 1, x: 0, y: 0, lastScale: 1, isZoomed: false };
+            state.scale = 1; state.x = 0; state.y = 0; state.isZoomed = false;
             imgEl.style.transform = `translate(0px, 0px) scale(1)`;
-            imgEl.style.cursor = 'default';
         }
 
-        // --- Event Listeners ---
         container.addEventListener('wheel', (e) => {
             e.preventDefault();
-            const delta = -e.deltaY;
-            const factor = Math.pow(1.1, delta / 100);
+            const factor = Math.pow(1.1, -e.deltaY / 100);
             zoomAt(state.scale * factor, e.clientX, e.clientY);
         }, { passive: false });
 
-        document.getElementById('nav-left').onclick = (e) => { if (!state.isZoomed) goPrev(); };
-        document.getElementById('nav-right').onclick = (e) => { if (!state.isZoomed) goNext(); };
-
-        // Double Click to Toggle Zoom
-        container.addEventListener('dblclick', (e) => {
-            if (state.scale > 1.1) resetTransform();
-            else zoomAt(config.doubleTapScale, e.clientX, e.clientY);
-        });
-
-        // --- Mouse Pan Implementation ---
+        // --- Momentum ---
+        let velocity = { x: 0, y: 0 };
+        let animationId = null;
         let isDragging = false;
-        let lastM = { x: 0, y: 0 };
+        const friction = 0.95;
 
-        container.addEventListener('mousedown', (e) => {
-            if (state.scale > 1.05) {
-                isDragging = true;
-                lastM = { x: e.clientX, y: e.clientY };
-                imgEl.style.cursor = 'grabbing';
-            }
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            if (isDragging) {
-                const dx = e.clientX - lastM.x;
-                const dy = e.clientY - lastM.y;
-                state.x += dx;
-                state.y += dy;
-                lastM = { x: e.clientX, y: e.clientY };
+        function stepMomentum() {
+            if (!isDragging && (Math.abs(velocity.x) > 0.1 || Math.abs(velocity.y) > 0.1)) {
+                state.x += velocity.x; state.y += velocity.y;
+                velocity.x *= friction; velocity.y *= friction;
                 applyTransform();
+                animationId = requestAnimationFrame(stepMomentum);
             }
-        });
+        }
 
-        window.addEventListener('mouseup', () => {
-            if (isDragging) {
-                isDragging = false;
-                imgEl.style.cursor = state.scale > 1 ? 'grab' : 'default';
-            }
-        });
-
-        // --- Touch Manager Integration ---
+        // --- Touch Manager ---
         const touchManager = new TouchManager(container);
 
-        touchManager.registerGesture('onPinch', (scaleDelta, thresholds) => {
-            // thresholds.frameScale is the delta since last move
-            const midX = (thresholds.pos[0].x + thresholds.pos[1].x) / 2;
-            const midY = (thresholds.pos[0].y + thresholds.pos[1].y) / 2;
-            zoomAt(state.scale * thresholds.frameScale, midX, midY);
+        touchManager.registerGesture('onDoubleTap', (x, y) => {
+            if (state.scale > 1.1) resetTransform();
+            else zoomAt(config.doubleTapScale, x, y);
         });
-
-        touchManager.registerGesture('onPan', (dx, dy) => {
+        touchManager.registerGesture('onPinch', (s, t) => {
+            const midX = (t.pos[0].x + t.pos[1].x) / 2;
+            const midY = (t.pos[0].y + t.pos[1].y) / 2;
+            zoomAt(state.scale * t.frameScale, midX, midY);
+        });
+        touchManager.registerGesture('onPan', (dx, dy, phase) => {
             if (state.scale > 1.05) {
-                state.x += dx;
-                state.y += dy;
+                if (phase === 'start') { isDragging = true; velocity = { x: 0, y: 0 }; cancelAnimationFrame(animationId); }
+                state.x += dx; state.y += dy;
+                if (phase === 'move') { velocity.x = dx; velocity.y = dy; }
                 applyTransform();
+                if (phase === 'end') { isDragging = false; stepMomentum(); }
             }
         });
 
-        // Swipe Down to Close / Navigation
-        let tsX = 0, tsY = 0;
-        container.addEventListener('touchstart', e => {
-            tsX = e.touches[0].clientX;
-            tsY = e.touches[0].clientY;
-        });
-
-        container.addEventListener('touchend', e => {
-            if (state.scale > 1.1) return;
-            const dx = e.changedTouches[0].clientX - tsX;
-            const dy = e.changedTouches[0].clientY - tsY;
-
-            // Swipe Down to close
-            if (dy > 120 && Math.abs(dx) < 60) closeViewer();
-            // Swipes for nav (if not handled by nav-zones)
-            else if (Math.abs(dx) > 80 && Math.abs(dy) < 50) {
-                dx > 0 ? goPrev() : goNext();
-            }
-        });
-
-        // Escape Key
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') closeViewer();
-            if (e.key === 'ArrowRight') goNext();
-            if (e.key === 'ArrowLeft') goPrev();
         });
-
     </script>
 </body>
 

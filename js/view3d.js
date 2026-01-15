@@ -28,6 +28,7 @@ export class View3D {
         // Settings State
         this.sphereSpacing = 6.0;
         this.particleCount = 4800;
+        this.sensitivity = 1.0;
 
         // Rendering Control
         this.isPaused = false;
@@ -56,6 +57,8 @@ export class View3D {
                 antialias: true,
                 powerPreference: "high-performance"
             });
+            this.renderer.outputEncoding = THREE.sRGBEncoding;
+            this.renderer.toneMapping = THREE.NoToneMapping;
             this.renderer.setSize(window.innerWidth, window.innerHeight);
             // Use stored resolution setting
             this.renderer.setPixelRatio(this.resolution || Math.min(window.devicePixelRatio, 2));
@@ -75,12 +78,7 @@ export class View3D {
         this.isZoomedIn = false;
         this.camera.position.z = this.baseDistance;
 
-        // 4. ADD LIGHTS
-        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-        this.scene.add(ambient);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-        dirLight.position.set(50, 50, 100);
-        this.scene.add(dirLight);
+        // 4. LIGHTS REMOVED (Using MeshBasicMaterial for exact color matching)
 
         // 5. CREATE PIVOT & FRAMES
         this.pivot = new THREE.Group();
@@ -136,9 +134,10 @@ export class View3D {
             const z = this.radius * Math.cos(phi);
 
             // Material - Start with a Color so we SEE it even if texture fails
-            const material = new THREE.MeshStandardMaterial({
-                color: 0xcccccc,
-                side: THREE.DoubleSide
+            const material = new THREE.MeshBasicMaterial({
+                color: 0xffffff, // Use white as base so texture isn't tinted
+                side: THREE.DoubleSide,
+                transparent: true // In case we want to fade them in/out later
             });
 
             const mesh = new THREE.Mesh(geometry, material);
@@ -166,7 +165,8 @@ export class View3D {
 
                 // Adjust scale for aspect ratio
                 // We want a fixed height (Reference height 5 is good for visibility)
-                const REF_HEIGHT = 5;
+                // User Request 3: Larger icons on mobile
+                const REF_HEIGHT = this.isMobile ? 8 : 5;
                 const aspect = tex.image.width / tex.image.height;
 
                 mesh.scale.set(REF_HEIGHT * aspect, REF_HEIGHT, 1);
@@ -307,8 +307,10 @@ export class View3D {
                 }
 
                 if (this.isDragging) {
-                    // Reduce sensitivity significantly on mobile
-                    const speed = this.isMobile ? 0.002 : 0.004;
+                    // Reduce sensitivity significantly on mobile, but user asked for more (Request 3)
+                    // Old: 0.002, New: 0.003
+                    // Sensitivity Setting Applied Here
+                    const speed = (this.isMobile ? 0.003 : 0.004) * this.sensitivity;
                     this.targetRotation.y += deltaX * speed;
                     this.targetRotation.x += deltaY * speed;
                 }
@@ -333,6 +335,9 @@ export class View3D {
             // Auto-Magnify Logic
             // If delta < 0 (zooming in) and we are already near minZ in LINE layout
             if (this.layout === 'LINE' && delta < 0 && this.onMagnify) {
+                // Disable auto-zoom-to-immersive on mobile (User Request 2)
+                if (this.isMobile) return;
+
                 const responsiveDist = this.getResponsiveLineDistance(this.currentIndex);
                 // Trigger magnifier when we get very close
                 if (this.camera.position.z < responsiveDist * 1.02) {
@@ -341,7 +346,7 @@ export class View3D {
                 }
             }
 
-            const zoomSpeed = 0.5;
+            const zoomSpeed = 0.5 * this.sensitivity;
             let newZ = this.camera.position.z + delta * zoomSpeed;
 
             // Clamp Zoom
@@ -407,7 +412,6 @@ export class View3D {
         // Click / Select logic ... (raycaster) -- REMAINING CODE BELOW --
         this.raycaster = new THREE.Raycaster();
         this.container.addEventListener('click', (e) => {
-            // ... (keep click logic below)
             if (this.isDragging) return; // Ignore drag-clicks
 
             // Normalize mouse
@@ -421,7 +425,13 @@ export class View3D {
 
             if (intersects.length > 0) {
                 const idx = intersects[0].object.userData.index;
-                this.selectIndex(idx);
+
+                // NEW: If we are already centered on this image in LINE mode, a click should zoom in (Magnifier)
+                if (this.layout === 'LINE' && idx === this.currentIndex) {
+                    if (this.onMagnify) this.onMagnify();
+                } else {
+                    this.selectIndex(idx);
+                }
             }
         });
 
@@ -575,9 +585,13 @@ export class View3D {
         this.currentIndex = index;
         if (this.onPreload) this.onPreload(index);
 
-        // Direct handoff to App logic (which triggers enterLineView)
-        // Skip the intermediate sphere zoom/rotation
-        this.onSelect(index, true);
+        if (this.layout === 'SPHERE') {
+            // Include nice zoom-in animation when entering from sphere
+            this.zoomAndSelect(index);
+        } else {
+            // Direct handoff for LINE layout
+            this.onSelect(index, true);
+        }
     }
 
     goToIndex(index) {
@@ -714,8 +728,16 @@ export class View3D {
                 this.createParticles();
             }
         }
+
+        if (key === 'sensitivity') {
+            this.sensitivity = value;
+        }
     }
 
-    show() { this.container.style.display = 'block'; this.resize(); }
+    show() {
+        this.container.style.display = 'block';
+        this.resize();
+        this.resumeRendering();
+    }
     hide() { this.container.style.display = 'none'; }
 }

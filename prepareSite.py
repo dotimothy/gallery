@@ -48,7 +48,7 @@ def get_gps_coordinates(tags):
         return latitude, longitude
     return None
 
-def getThumbs(check=False,size=(1200,900)):
+def getThumbs(quality=85, check=False,size=(1200,900)):
     for name in tqdm(imgNames, desc="Making Thumbnails"):
         thumbPath = f'./{thumbDir}/{name}.jpg'
         fullPath = f'{fullDir}/{name}.jpg'
@@ -56,7 +56,9 @@ def getThumbs(check=False,size=(1200,900)):
             img = cv.imread(fullPath)
             if img is not None:
                 resized = cv.resize(img,size)
-                cv.imwrite(thumbPath,resized,[cv.IMWRITE_JPEG_QUALITY,80])
+                # Ensure quality is int and clamped
+                q = int(max(1, min(quality, 100)))
+                cv.imwrite(thumbPath,resized,[cv.IMWRITE_JPEG_QUALITY, q])
             else:
                 print(f"Warning: Could not read image {fullPath}. Skipping thumbnail generation.")
 
@@ -117,24 +119,31 @@ def getMetadatas(check=False):
     with open(metadataJSON, 'w') as metadataFile:
         json.dump(all_metadata, metadataFile, indent=4)
 
-def createSampleImages(N=25,size=(4000,3000)):
+def createSampleImages(N=25,size=(4000,3000), quality=85):
+    q = int(max(1, min(quality, 100)))
     for i in tqdm(range(N), desc="Creating Sample Images"):
         sample = np.zeros(size[::-1],np.uint8)
         cv.putText(sample,str(i),(size[0]//2,size[1]//2),cv.FONT_HERSHEY_SIMPLEX,10,255,20,cv.LINE_AA)
         sample = cv.copyMakeBorder(sample,100,100,100,100,cv.BORDER_CONSTANT,None,value=255)
         sample = cv.copyMakeBorder(sample,75,75,75,75,cv.BORDER_CONSTANT,None,value=0)
-        cv.imwrite(f'{fullDir}/{i}.jpg',sample)
+        cv.imwrite(f'{fullDir}/{i}.jpg',sample, [cv.IMWRITE_JPEG_QUALITY, q])
 
 import argparse
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Prepare site images and metadata.')
     parser.add_argument('-n', '--number', type=int, default=25, help='Number of sample images to generate if directory is empty')
+    parser.add_argument('-q', '--quality', type=int, default=85, help='Set JPEG compression quality for generated thumbnails and full-size images (1-100, default 85).')
     args = parser.parse_args()
+
+    # Validate quality
+    if not (1 <= args.quality <= 100):
+        print("Error: --quality must be an integer between 1 and 100.")
+        exit(1)
 
     if len(os.listdir(fullDir)) == 0:
         print(f'No images found in fulls directory. Creating {args.number} sample images...')
-        createSampleImages(N=args.number)
+        createSampleImages(N=args.number, quality=args.quality)
     else:
         # If user explicitly asks for samples via -n but dir is not empty, we might ignore?
         # Or should we warn?
@@ -186,7 +195,7 @@ if __name__ == '__main__':
     imgNames = [name for name, sort_key in image_files_for_sorting]
 
     print('Generating thumbnails...')
-    getThumbs(check=False)
+    getThumbs(quality=args.quality, check=False)
     print('Extracting metadata and saving to single JSON file...')
     getMetadatas(check=False)
     print('Processing complete!')

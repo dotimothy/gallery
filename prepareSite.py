@@ -58,7 +58,7 @@ def getThumbs(quality=85, check=False,size=(1200,900)):
                 resized = cv.resize(img,size)
                 # Ensure quality is int and clamped
                 q = int(max(1, min(quality, 100)))
-                cv.imwrite(thumbPath,resized,[cv.IMWRITE_JPEG_QUALITY, q])
+                cv.imwrite(thumbPath,resized,[cv.IMWRITE_JPEG_QUALITY, q, cv.IMWRITE_JPEG_PROGRESSIVE, 1])
             else:
                 print(f"Warning: Could not read image {fullPath}. Skipping thumbnail generation.")
 
@@ -126,7 +126,7 @@ def createSampleImages(N=25,size=(4000,3000), quality=85):
         cv.putText(sample,str(i),(size[0]//2,size[1]//2),cv.FONT_HERSHEY_SIMPLEX,10,255,20,cv.LINE_AA)
         sample = cv.copyMakeBorder(sample,100,100,100,100,cv.BORDER_CONSTANT,None,value=255)
         sample = cv.copyMakeBorder(sample,75,75,75,75,cv.BORDER_CONSTANT,None,value=0)
-        cv.imwrite(f'{fullDir}/{i}.jpg',sample, [cv.IMWRITE_JPEG_QUALITY, q])
+        cv.imwrite(f'{fullDir}/{i}.jpg',sample, [cv.IMWRITE_JPEG_QUALITY, q, cv.IMWRITE_JPEG_PROGRESSIVE, 1])
 
 import argparse
 

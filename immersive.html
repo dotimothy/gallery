@@ -4,109 +4,180 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Immersive Viewer</title>
+    <title>Pro Immersive Viewer</title>
     <style>
+        :root {
+            --bg-color: #000000;
+            --ui-bg: rgba(20, 20, 20, 0.9);
+            --accent: #ffffff;
+            --text: #ffffff;
+        }
+
         body {
             margin: 0;
             padding: 0;
-            background: black;
+            background-color: var(--bg-color);
             overflow: hidden;
             width: 100vw;
             height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--text);
             touch-action: none;
             user-select: none;
-            font-family: 'Roboto', sans-serif;
-            color: white;
         }
 
-        #container {
+        /* --- Canvas/Image Area --- */
+        #viewport {
             width: 100%;
             height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             position: relative;
+            cursor: grab;
+            overflow: hidden;
         }
 
-        #image {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            transform-origin: center center;
+        #viewport:active {
+            cursor: grabbing;
+        }
+
+        #target-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            /* Transform Origin 0 0 is crucial for the matrix math to work simply */
+            transform-origin: 0 0;
             will-change: transform;
-            cursor: grab;
-            opacity: 0;
+            pointer-events: none;
+            box-shadow: 0 0 100px rgba(0, 0, 0, 0.8);
+        }
+
+        /* --- UI Overlay: Empty State --- */
+        #empty-state {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
             transition: opacity 0.3s ease;
         }
 
-        #controls-top {
+        .upload-box {
+            border: 1px solid #333;
+            padding: 40px;
+            border-radius: 8px;
+            text-align: center;
+            transition: all 0.2s;
+            background: #111;
+        }
+
+        .upload-box:hover {
+            border-color: #666;
+            background: #1a1a1a;
+        }
+
+        .btn-upload {
+            background: #333;
+            border: 1px solid #555;
+            padding: 10px 24px;
+            color: white;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background 0.2s;
+        }
+
+        .btn-upload:hover {
+            background: #555;
+        }
+
+        /* --- UI Overlay: HUD --- */
+        #hud {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            display: flex;
-            gap: 15px;
-            z-index: 100;
+            pointer-events: none;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: 500;
+            opacity: 1;
             transition: opacity 0.5s ease;
         }
 
-        #controls-bottom {
-            position: fixed;
+        .hud-hidden {
+            opacity: 0 !important;
+        }
+
+        .toolbar {
+            position: absolute;
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
+            background: var(--ui-bg);
+            padding: 8px 20px;
+            border-radius: 50px;
             display: flex;
             gap: 20px;
-            z-index: 100;
-            transition: opacity 0.5s ease;
-            align-items: center;
+            pointer-events: auto;
+            border: 1px solid rgba(255, 255, 255, 0.15);
         }
 
-        button {
-            background: rgba(0, 0, 0, 0.5);
-            border: 1.5px solid rgba(255, 255, 255, 0.6);
+        .icon-btn {
+            background: transparent;
+            border: none;
             color: white;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            font-size: 1.2em;
+            width: 32px;
+            height: 32px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            outline: none;
-            transition: background 0.2s, transform 0.1s;
-            -webkit-tap-highlight-color: transparent;
+            opacity: 0.7;
+            transition: opacity 0.2s;
         }
 
-        button:active {
-            background: rgba(255, 255, 255, 0.3);
-            transform: scale(0.95);
+        .icon-btn:hover {
+            opacity: 1;
         }
 
-        button:hover {
-            background: rgba(255, 255, 255, 0.1);
+        .icon-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: white;
+        }
+
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+            font-family: monospace;
+            letter-spacing: 1px;
         }
 
         .loader {
+            display: none;
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(255, 255, 255, 0.2);
-            border-top: 4px solid white;
+            width: 30px;
+            height: 30px;
+            border: 2px solid #333;
+            border-top-color: #fff;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-            pointer-events: none;
+            animation: spin 0.8s linear infinite;
+            z-index: 100;
         }
 
         @keyframes spin {
-            0% {
-                transform: translate(-50%, -50%) rotate(0deg);
-            }
-
-            100% {
+            to {
                 transform: translate(-50%, -50%) rotate(360deg);
             }
         }
@@ -115,169 +186,320 @@
 
 <body>
 
-    <div id="container">
-        <div class="loader" id="loader"></div>
-        <img id="image" draggable="false" />
+    <div id="empty-state">
+        <div class="upload-box" id="drop-zone">
+            <h2 style="margin: 0 0 10px 0; font-weight: 300;">Viewer</h2>
+            <p style="color: #666; font-size: 0.9rem; margin-bottom: 20px;">Drag image or paste URL</p>
+            <input type="file" id="file-input" accept="image/*" style="display: none">
+            <button class="btn-upload" onclick="document.getElementById('file-input').click()">Open File</button>
+        </div>
     </div>
 
-    <script type="module">
-        import { TouchManager } from './js/TouchManager.js';
+    <div id="viewport">
+        <div class="loader" id="loader"></div>
+        <img id="target-image" alt="" draggable="false" />
+    </div>
 
-        const params = new URLSearchParams(window.location.search);
-        let imgSrc = params.get('img');
-        let nextSrc = params.get('next');
-        let prevSrc = params.get('prev');
-        const interval = parseInt(params.get('interval') || '3000');
-        const isSlideshow = params.has('slideshow');
+    <div id="hud">
+        <div class="info-panel" id="info-text">WAITING</div>
+        <div class="toolbar">
+            <button class="icon-btn" id="btn-reset" title="Reset (R)">
+                <svg viewBox="0 0 24 24">
+                    <path
+                        d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
+                </svg>
+            </button>
+            <button class="icon-btn" id="btn-minus" title="Zoom Out">
+                <svg viewBox="0 0 24 24">
+                    <path d="M19 13H5v-2h14v2z" />
+                </svg>
+            </button>
+            <button class="icon-btn" id="btn-plus" title="Zoom In">
+                <svg viewBox="0 0 24 24">
+                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                </svg>
+            </button>
+            <button class="icon-btn" id="btn-fs" title="Fullscreen (F)">
+                <svg viewBox="0 0 24 24">
+                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                </svg>
+            </button>
+            <button class="icon-btn" id="btn-close" title="Close/New">
+                <svg viewBox="0 0 24 24">
+                    <path
+                        d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                </svg>
+            </button>
+        </div>
+    </div>
 
-        const imgEl = document.getElementById('image');
-        const loader = document.getElementById('loader');
-        const container = document.getElementById('container');
-
-        // State
-        let state = {
-            scale: 1,
-            x: 0,
-            y: 0,
-            lastScale: 1,
-            isZoomed: false
+    <script>
+        // --- Configuration ---
+        const CONFIG = {
+            minScale: 0.05,
+            maxScale: 100, // Deep zoom
+            wheelSensitivity: 0.001, // Smoother wheel
+            panFriction: 0.08, // Physics feel
         };
 
-        const config = {
-            minScale: 1,
-            maxScale: 10,
-            zoomStep: 0.1,
-            doubleTapScale: 3
+        // --- State ---
+        const state = {
+            x: 0, y: 0, scale: 1,
+            // Image Dimensions
+            w: 0, h: 0,
+            // Interaction
+            isDragging: false,
+            pointers: new Map(),
+            lastDist: 0,
+            lastPoint: { x: 0, y: 0 },
+        };
+
+        const el = {
+            view: document.getElementById('viewport'),
+            img: document.getElementById('target-image'),
+            empty: document.getElementById('empty-state'),
+            loader: document.getElementById('loader'),
+            info: document.getElementById('info-text')
         };
 
         // --- Initialization ---
-        function loadContent(src) {
-            if (!src) return;
-            loader.style.display = 'block';
-            imgEl.style.opacity = '0';
-            imgEl.src = src;
-            imgEl.onload = () => {
-                loader.style.display = 'none';
-                imgEl.style.opacity = '1';
-                resetTransform();
-                preload(nextSrc);
-                preload(prevSrc);
+        function init() {
+            const params = new URLSearchParams(window.location.search);
+            const src = params.get('img');
+            if (src) loadImg(src);
+
+            setupInputs();
+            setupUI();
+
+            // Re-center on window resize
+            window.addEventListener('resize', () => {
+                if (state.w > 0) constrainAndRender();
+            });
+        }
+
+        function loadImg(src) {
+            el.loader.style.display = 'block';
+            el.img.style.opacity = '0';
+
+            const img = new Image();
+            img.src = src;
+            img.onload = () => {
+                el.img.src = src;
+                state.w = img.naturalWidth;
+                state.h = img.naturalHeight;
+
+                resetView(); // Center image immediately
+
+                el.loader.style.display = 'none';
+                el.img.style.opacity = '1';
+                el.empty.style.opacity = '0';
+                setTimeout(() => el.empty.style.display = 'none', 300);
+            };
+            img.onerror = () => {
+                el.loader.style.display = 'none';
+                alert('Could not load image');
             };
         }
 
-        loadContent(imgSrc);
+        // --- Core Math (Zoom/Pan) ---
 
-        function preload(url) {
-            if (!url) return;
-            const link = document.createElement('link');
-            link.rel = 'preload'; link.as = 'image'; link.href = url;
-            document.head.appendChild(link);
+        function resetView() {
+            // Calculate scale to fit "contain" style
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+
+            const scaleX = vw / state.w;
+            const scaleY = vh / state.h;
+
+            // Choose smaller scale (fit), minus a little padding (0.9)
+            state.scale = Math.min(scaleX, scaleY) * 0.9;
+
+            // Center calculation
+            // Center X = (ViewWidth - ImageWidth * Scale) / 2
+            state.x = (vw - state.w * state.scale) / 2;
+            state.y = (vh - state.h * state.scale) / 2;
+
+            constrainAndRender();
         }
 
-
-
-        // --- Navigation Logic ---
-        function goNext() { if (window.parent) window.parent.postMessage({ action: 'next' }, '*'); }
-        function goPrev() { if (window.parent) window.parent.postMessage({ action: 'prev' }, '*'); }
-        function closeViewer() { if (window.parent) window.parent.postMessage({ action: 'close' }, '*'); }
-
-        window.addEventListener('message', (e) => {
-            if (e.data.action === 'update') {
-                imgSrc = e.data.img;
-                nextSrc = e.data.next;
-                prevSrc = e.data.prev;
-                loadContent(imgSrc);
-            }
-        });
-
-        if (isSlideshow && nextSrc) {
-            setInterval(goNext, Math.max(1000, interval));
-        }
-
-        // --- Zoom Logic ---
-        function zoomAt(targetScale, pointerX, pointerY) {
-            const newScale = Math.max(config.minScale, Math.min(config.maxScale, targetScale));
+        function zoomAt(factor, cx, cy) {
             const oldScale = state.scale;
+            let newScale = oldScale * factor;
+
+            // Clamp Zoom
+            newScale = Math.max(CONFIG.minScale, Math.min(CONFIG.maxScale, newScale));
+
+            // Math: The point under the mouse (cx, cy) must stay static.
+            // Formula: newPos = Mouse - (Mouse - oldPos) * (newScale / oldScale)
+            state.x = cx - (cx - state.x) * (newScale / oldScale);
+            state.y = cy - (cy - state.y) * (newScale / oldScale);
             state.scale = newScale;
 
-            if (newScale <= 1.01) {
-                resetTransform();
-                return;
-            }
-
-            const rect = container.getBoundingClientRect();
-            const centerX = rect.width / 2;
-            const centerY = rect.height / 2;
-            const relX = pointerX - centerX - state.x;
-            const relY = pointerY - centerY - state.y;
-            const ratio = newScale / oldScale;
-            state.x -= relX * (ratio - 1);
-            state.y -= relY * (ratio - 1);
-            state.isZoomed = true;
-            applyTransform();
+            constrainAndRender();
         }
 
-        function applyTransform() {
-            const viewW = container.clientWidth;
-            const viewH = container.clientHeight;
-            const limitX = Math.max(0, (viewW * state.scale - viewW) / 2);
-            const limitY = Math.max(0, (viewH * state.scale - viewH) / 2);
-            state.x = Math.max(-limitX, Math.min(limitX, state.x));
-            state.y = Math.max(-limitY, Math.min(limitY, state.y));
-            imgEl.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+        function pan(dx, dy) {
+            state.x += dx;
+            state.y += dy;
+            constrainAndRender();
         }
 
-        function resetTransform() {
-            state.scale = 1; state.x = 0; state.y = 0; state.isZoomed = false;
-            imgEl.style.transform = `translate(0px, 0px) scale(1)`;
+        // --- Constraints & Rendering ---
+
+        function constrainAndRender() {
+            // This function ensures you can't lose the image completely.
+            // It allows you to drag it off screen, but keeps a "handle" visible.
+
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const currentW = state.w * state.scale;
+            const currentH = state.h * state.scale;
+
+            // Margin: How many pixels of the image must remain on screen
+            const margin = 100;
+
+            // Hard constraints (can't go fully off screen)
+            if (state.x > vw - margin) state.x = vw - margin;
+            if (state.x + currentW < margin) state.x = margin - currentW;
+
+            if (state.y > vh - margin) state.y = vh - margin;
+            if (state.y + currentH < margin) state.y = margin - currentH;
+
+            // Apply Transform
+            el.img.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scale(${state.scale})`;
+
+            // Update HUD
+            const pct = Math.round(state.scale * 100);
+            el.info.textContent = `${state.w}x${state.h} • ${pct}%`;
         }
 
-        container.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const factor = Math.pow(1.1, -e.deltaY / 100);
-            zoomAt(state.scale * factor, e.clientX, e.clientY);
-        }, { passive: false });
+        // --- Input Handling (Unified) ---
 
-        // --- Momentum ---
-        let velocity = { x: 0, y: 0 };
-        let animationId = null;
-        let isDragging = false;
-        const friction = 0.95;
+        function setupInputs() {
+            const v = el.view;
 
-        function stepMomentum() {
-            if (!isDragging && (Math.abs(velocity.x) > 0.1 || Math.abs(velocity.y) > 0.1)) {
-                state.x += velocity.x; state.y += velocity.y;
-                velocity.x *= friction; velocity.y *= friction;
-                applyTransform();
-                animationId = requestAnimationFrame(stepMomentum);
-            }
+            // Mouse Wheel (Zoom)
+            v.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                // Normalize wheel delta for different devices
+                const delta = -e.deltaY;
+                // Exponential zoom factor
+                const factor = Math.pow(1 + CONFIG.wheelSensitivity, delta);
+                zoomAt(factor, e.clientX, e.clientY);
+            }, { passive: false });
+
+            // Pointer Events (Mouse/Touch)
+            v.addEventListener('pointerdown', (e) => {
+                state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                v.setPointerCapture(e.pointerId);
+                state.isDragging = true;
+
+                // Track start point for drag calculation
+                if (state.pointers.size === 1) {
+                    state.lastPoint = { x: e.clientX, y: e.clientY };
+                } else if (state.pointers.size === 2) {
+                    // Initialize Pinch
+                    const p = Array.from(state.pointers.values());
+                    state.lastDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+                }
+            });
+
+            v.addEventListener('pointermove', (e) => {
+                if (!state.pointers.has(e.pointerId)) return;
+                e.preventDefault();
+
+                // Update current pointer position
+                state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+                const pointers = Array.from(state.pointers.values());
+
+                if (state.pointers.size === 1 && state.isDragging) {
+                    // Pan Logic
+                    const dx = e.clientX - state.lastPoint.x;
+                    const dy = e.clientY - state.lastPoint.y;
+
+                    pan(dx, dy);
+
+                    state.lastPoint = { x: e.clientX, y: e.clientY };
+                }
+                else if (state.pointers.size === 2) {
+                    // Pinch Logic
+                    const p1 = pointers[0];
+                    const p2 = pointers[1];
+                    const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+                    const cx = (p1.x + p2.x) / 2;
+                    const cy = (p1.y + p2.y) / 2;
+
+                    if (state.lastDist > 0) {
+                        const factor = dist / state.lastDist;
+                        zoomAt(factor, cx, cy);
+                    }
+                    state.lastDist = dist;
+
+                    // Also update drag point to center of pinch to prevent jumps
+                    state.lastPoint = { x: cx, y: cy };
+                }
+            });
+
+            const end = (e) => {
+                state.pointers.delete(e.pointerId);
+                state.isDragging = state.pointers.size > 0;
+                if (state.pointers.size < 2) state.lastDist = 0;
+                // If switching from 2 fingers to 1, reset the drag anchor
+                if (state.pointers.size === 1) {
+                    const p = state.pointers.values().next().value;
+                    state.lastPoint = { x: p.x, y: p.y };
+                }
+            };
+            v.addEventListener('pointerup', end);
+            v.addEventListener('pointercancel', end);
+
+            // Double click reset
+            v.addEventListener('dblclick', resetView);
+
+            // Drag and Drop
+            document.addEventListener('dragover', e => e.preventDefault());
+            document.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => loadImg(ev.target.result);
+                    reader.readAsDataURL(e.dataTransfer.files[0]);
+                }
+            });
         }
 
-        // --- Touch Manager ---
-        const touchManager = new TouchManager(container);
+        // --- UI Logic ---
+        function setupUI() {
+            // Hide HUD on idle
+            let timer;
+            const wake = () => {
+                document.getElementById('hud').classList.remove('hud-hidden');
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    if (!state.pointers.size) document.getElementById('hud').classList.add('hud-hidden');
+                }, 2000);
+            };
+            window.addEventListener('pointermove', wake);
+            window.addEventListener('keydown', wake);
 
-        touchManager.registerGesture('onDoubleTap', (x, y) => {
-            if (state.scale > 1.1) resetTransform();
-            else zoomAt(config.doubleTapScale, x, y);
-        });
-        touchManager.registerGesture('onPinch', (s, t) => {
-            const midX = (t.pos[0].x + t.pos[1].x) / 2;
-            const midY = (t.pos[0].y + t.pos[1].y) / 2;
-            zoomAt(state.scale * t.frameScale, midX, midY);
-        });
-        touchManager.registerGesture('onPan', (dx, dy, phase) => {
-            if (state.scale > 1.05) {
-                if (phase === 'start') { isDragging = true; velocity = { x: 0, y: 0 }; cancelAnimationFrame(animationId); }
-                state.x += dx; state.y += dy;
-                if (phase === 'move') { velocity.x = dx; velocity.y = dy; }
-                applyTransform();
-                if (phase === 'end') { isDragging = false; stepMomentum(); }
-            }
-        });
+            // Button actions
+            document.getElementById('btn-reset').onclick = resetView;
+            document.getElementById('btn-plus').onclick = () => zoomAt(1.5, window.innerWidth / 2, window.innerHeight / 2);
+            document.getElementById('btn-minus').onclick = () => zoomAt(0.66, window.innerWidth / 2, window.innerHeight / 2);
+            document.getElementById('btn-close').onclick = () => {
+                el.empty.style.display = 'flex';
+                setTimeout(() => el.empty.style.opacity = '1', 10);
+                el.img.src = '';
+            };
+            document.getElementById('btn-fs').onclick = () => {
+                if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+                else document.exitFullscreen();
+            };
+        }
 
-        document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') closeViewer();
-        });
+        // Start
+        init();
     </script>
 </body>
 

@@ -233,6 +233,8 @@
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.1);
             max-width: 280px;
+            max-height: calc(100vh - 180px);
+            overflow-y: auto;
             backdrop-filter: blur(15px);
             -webkit-backdrop-filter: blur(15px);
             z-index: 600;
@@ -244,6 +246,15 @@
             transition: opacity 0.4s cubic-bezier(0.2, 0, 0.2, 1), transform 0.4s cubic-bezier(0.2, 0, 0.2, 1);
             opacity: 0;
             transform: translateX(-15px);
+        }
+
+        #metadata-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #metadata-panel::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
         }
 
         #metadata-panel.visible {
@@ -279,6 +290,33 @@
             text-align: right;
             padding-left: 20px;
             font-family: inherit;
+        }
+
+        .meta-link {
+            color: #4da6ff;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .meta-link:hover {
+            color: #80c1ff;
+            text-decoration: underline;
+        }
+
+        #map-container {
+            margin-top: 15px;
+            width: 100%;
+            height: 200px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: #000;
+        }
+
+        #map-panel-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
         }
     </style>
 </head>
@@ -714,7 +752,7 @@
                 return parts[0] + (parts[1] / 60) + (parts[2] / 3600);
             };
 
-            const getGPS = (d) => {
+            const getGPSData = (d) => {
                 const lat = d['GPS GPSLatitude'], latRef = d['GPS GPSLatitudeRef'];
                 const lon = d['GPS GPSLongitude'], lonRef = d['GPS GPSLongitudeRef'];
                 if (lat && latRef && lon && lonRef) {
@@ -722,9 +760,16 @@
                     if (latRef === 'S') layout *= -1;
                     let long = convertDegrees(lon);
                     if (lonRef === 'W') long *= -1;
-                    if (!isNaN(layout) && !isNaN(long)) return `${layout.toFixed(4)}, ${long.toFixed(4)}`;
+                    if (!isNaN(layout) && !isNaN(long)) {
+                        return {
+                            display: `${layout.toFixed(4)}, ${long.toFixed(4)}`,
+                            lat: layout.toFixed(4),
+                            lon: long.toFixed(4),
+                            url: `https://timothydo.me/astronomy/lightpollution/?lat=${layout.toFixed(4)}&lon=${long.toFixed(4)}`
+                        };
+                    }
                 }
-                return 'N/A';
+                return null;
             };
 
             const w = info['Image Width'] || 'N/A';
@@ -738,14 +783,15 @@
             const expRaw = info['EXIF ExposureTime'] ? safeEval(info['EXIF ExposureTime']) : 'N/A';
             const exp = (typeof expRaw === 'number' && expRaw < 0.1 && expRaw > 0) ? `1/${Math.round(1 / expRaw)}s` : (expRaw === 'N/A' ? 'N/A' : expRaw + 's');
             const date = exifToDate(info['Image DateTime']);
-            const gps = getGPS(info);
+            const gpsData = getGPSData(info);
+            const gpsDisplay = gpsData ? `<a href="${gpsData.url}" target="_blank" class="meta-link">${gpsData.display}</a>` : 'N/A';
 
             // Extract filename for the header
             const fileName = info._originalSrc ? info._originalSrc.split('/').pop() : 'Direct Upload';
 
             const displayFields = [
                 { label: 'Capture Date', value: date },
-                { label: 'Coordinates', value: gps },
+                { label: 'Coordinates', value: gpsDisplay },
                 { label: 'Camera', value: model },
                 { label: 'Resolution', value: (w !== 'N/A') ? `${w} x ${h} (${mp})` : 'N/A' },
                 { label: 'Exposure', value: exp },
@@ -770,6 +816,23 @@
                 row.innerHTML = `<span class="meta-label">${f.label}</span><span class="meta-value">${val}</span>`;
                 panel.appendChild(row);
             });
+
+            // Add Map Iframe if GPS is available
+            if (gpsData) {
+                const mapTitle = document.createElement('h3');
+                mapTitle.style.cssText = "margin:20px 0 10px 0; font-weight:300; font-size:14px; letter-spacing:1px; color:rgba(255,255,255,0.5);";
+                mapTitle.textContent = "LIGHT POLLUTION";
+                panel.appendChild(mapTitle);
+
+                const mapContainer = document.createElement('div');
+                mapContainer.id = 'map-container';
+                const iframe = document.createElement('iframe');
+                iframe.id = 'map-panel-iframe';
+                iframe.src = gpsData.url;
+                iframe.title = "Light Pollution Map";
+                mapContainer.appendChild(iframe);
+                panel.appendChild(mapContainer);
+            }
         }
 
         function toggleMetadata() {

@@ -1,4 +1,4 @@
-name: Github Action to Generate Gallery Template to Deploy on Github Pages
+name: Github Action To Generate Gallery Template To Deploy On Github Pages
 
 on:
   push:
@@ -23,40 +23,31 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11' # Choose your desired Python version
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install numpy opencv-python-headless exifread tqdm pillow
+          make install
 
-      - name: Run Python script to generate site
-        run: python prepareSite.py
+      - name: Generate and Package Site
+        run: make dist
 
-      - name: Prepare site for deployment
-        run: |
-          mkdir _site
-          cp index.html _site/
-          cp immersive.html _site/
-          cp -r css _site/
-          cp -r js _site/
-          cp -r fulls _site/
-          cp -r metadata _site/
-          cp -r thumbs _site/
-
-      - name: Upload artifact
+      - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: './_site'
-          
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
+
+      - name: Cleanup Build Artifacts
+        run: make deepclean
         
   deploy:
     environment:

@@ -18,6 +18,7 @@ export class View3D {
         this.previousMouse = { x: 0, y: 0 };
         this.targetRotation = { x: 0, y: 0 };
         this.currentRotation = { x: 0, y: 0 };
+        this.isTransitioning = false; // Flag to disable physics during GSAP anims
 
         // Time & Stats
         this.clock = new THREE.Clock();
@@ -26,7 +27,7 @@ export class View3D {
         this.fpsElement = document.getElementById('fps-counter');
 
         // Settings State
-        this.sphereSpacing = 6.0;
+        this.sphereSpacing = 10.0;
         this.particleCount = 4800;
         this.sensitivity = 1.0;
 
@@ -439,67 +440,32 @@ export class View3D {
         window.addEventListener('resize', () => this.resize());
     }
 
-    zoomAndSelect(index) {
-        if (!this.frames[index]) return;
-        this.currentIndex = index;
 
-        // If we are already in LINE layout, just animate to the new center
-        if (this.layout === 'LINE') {
-            this.enterLineView(index);
-            return;
-        }
-
-        // Standard Sphere Rotation Logic
-        const targetMesh = this.frames[index];
-        const currentWorldPos = new THREE.Vector3();
-        targetMesh.getWorldPosition(currentWorldPos);
-        const targetWorldPos = new THREE.Vector3(0, 0, this.radius);
-        const rotationQ = new THREE.Quaternion().setFromUnitVectors(
-            currentWorldPos.normalize(),
-            targetWorldPos.normalize()
-        );
-        const startQ = this.pivot.quaternion.clone();
-        const targetQ = rotationQ.multiply(startQ);
-
-        gsap.to(this.pivot.quaternion, {
-            x: targetQ.x,
-            y: targetQ.y,
-            z: targetQ.z,
-            w: targetQ.w,
-            duration: 1.2,
-            ease: "power2.inOut",
-            onComplete: () => {
-                this.onSelect(index, true);
-                this.isZoomedIn = false;
-            }
-        });
-
-        // Zoom Camera In
-        gsap.to(this.camera.position, {
-            z: 40,
-            duration: 1.2,
-            ease: "power2.inOut",
-            onComplete: () => {
-                gsap.to(this.camera.position, {
-                    z: this.baseDistance,
-                    duration: 0.5,
-                    delay: 0.1
-                });
-            }
-        });
-    }
 
     enterLineView(targetIndex) {
         this.layout = 'LINE';
         this.currentIndex = targetIndex;
+        this.isTransitioning = true; // Disable physics during layout change
 
         // 1. Reset Pivot Rotation to Identity (Straight line)
-        // We animate this or snap it? Animate looks better.
-        // Also reset state vars so they don't snap when we return to Sphere
-        this.targetRotation = { x: 0, y: 0 };
-        this.currentRotation = { x: 0, y: 0 };
+        // SMART FIX: Animate to NEAREST multiple of 2PI for Y axis to avoid huge "unwind" spins.
+        const PI2 = Math.PI * 2;
+        const currentY = this.pivot.rotation.y;
+        const targetY = Math.round(currentY / PI2) * PI2;
 
-        gsap.to(this.pivot.rotation, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.out" });
+        this.targetRotation = { x: 0, y: targetY };
+        this.currentRotation = { x: 0, y: targetY };
+
+        gsap.to(this.pivot.rotation, {
+            x: 0,
+            y: targetY,
+            z: 0,
+            duration: 0.8,
+            ease: "power2.out",
+            onComplete: () => {
+                this.isTransitioning = false; // Layout change done
+            }
+        });
 
         // 2. Animate Camera to a good viewing distance for simple line
         const lineDist = this.getResponsiveLineDistance(targetIndex);
@@ -585,13 +551,11 @@ export class View3D {
         this.currentIndex = index;
         if (this.onPreload) this.onPreload(index);
 
-        if (this.layout === 'SPHERE') {
-            // Include nice zoom-in animation when entering from sphere
-            this.zoomAndSelect(index);
-        } else {
-            // Direct handoff for LINE layout
-            this.onSelect(index, true);
-        }
+        // DIRECT HANDOFF: We skip 'zoomAndSelect' because it tilts the sphere,
+        // which conflicts with 'enterLineView' (which requires an upright sphere).
+        // relying on 'enterLineView' to handle the entire animation (uprighting + centering)
+        // is much smoother and consistent.
+        this.onSelect(index, true);
     }
 
     goToIndex(index) {
@@ -619,8 +583,8 @@ export class View3D {
         }
 
         // Smooth Rotation Inertia (Time-based Damping)
-        // Only apply in SPHERE mode.
-        if (this.layout !== 'LINE') {
+        // Only apply in SPHERE mode and if NOT transitioning (GSAP control)
+        if (this.layout !== 'LINE' && !this.isTransitioning) {
             // Lerp factor independent of framerate: 1 - exp(-speed * dt)
             // Increased damping for mobile (lower speed factor)
             const speedFactor = this.isMobile ? 6.0 : 10.0;
@@ -634,7 +598,7 @@ export class View3D {
         }
 
         // Auto Rotate
-        if (!this.isDragging) {
+        if (!this.isDragging && !this.isTransitioning) {
             // Speed should be "per second" now if using dt, but targetRotation is position accumulator
             // Original: += 0.0005 per frame. At 60fps -> 0.03 per second.
             this.targetRotation.y += 0.03 * dt;

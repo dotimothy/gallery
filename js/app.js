@@ -77,52 +77,28 @@ class App {
     }
 
     setupStateHooks() {
-        // EXPLORE -> PREVIEW: Open image viewer
+        // EXPLORE/DETAIL -> PREVIEW: Single image fit-to-screen (viewer)
         this.viewState.registerHook('preview', 'onEnter', (fromState) => {
-            this.log('Entering PREVIEW state');
+            this.log(`Entering PREVIEW state from ${fromState}`);
+
+            // Standard Preview Initialization
             this.ui.imageViewer.hidden = false;
             this.ui.imageViewer.classList.add('visible');
 
-            // Pause 3D rendering to save battery
+            // 3D Rendering Management:
+            // In 3D mode, PREVIEW is interactive Line View, so we MUST keep it rendering.
+            // In 2D mode, the viewer is a solid overlay, so we should pause to save resources.
             if (this.mode === '3D') {
+                this.view3d.resumeRendering();
+            } else {
                 this.view3d.pauseRendering();
             }
-        });
 
-        // PREVIEW -> DETAIL: Enter magnifier
-        this.viewState.registerHook('detail', 'onEnter', (fromState) => {
-            this.log('Entering DETAIL state');
-            this.ui.imageViewer.classList.remove('transparent');
-            this.ui.fullImageContainer.style.display = 'flex';
-
-            // Completely hide 3D canvas to prevent event leakage
-            if (this.mode === '3D') {
-                document.getElementById('gallery-3d').style.display = 'none';
-            }
-
-            // Update zoom button
-            const zoomBtn = document.getElementById('zoomBtn');
-            if (zoomBtn) {
-                zoomBtn.innerText = '🔙';
-                zoomBtn.title = 'Return to Preview';
-            }
-
-            // Hide arrows in magnifier
-            this.ui.leftArrow.hidden = true;
-            this.ui.rightArrow.hidden = true;
-
-            // FIX: Hide Thumbnails in Magnifier Mode
-            const thumbs = document.getElementById('thumbnail-selector');
-            if (thumbs) thumbs.classList.add('hidden');
-        });
-
-        // DETAIL -> PREVIEW: Exit magnifier
-        this.viewState.registerHook('preview', 'onEnter', (fromState) => {
+            // Logic specifically for returning from DETAIL (Magnifier)
             if (fromState === 'detail') {
-                this.log('Exiting DETAIL to PREVIEW');
                 this.ui.fullImageContainer.style.display = 'none';
 
-                // Restore 3D canvas
+                // Restore 3D visibility components
                 if (this.mode === '3D') {
                     document.getElementById('gallery-3d').style.display = 'block';
                     this.ui.imageViewer.classList.add('transparent');
@@ -140,11 +116,38 @@ class App {
                     this.ui.leftArrow.hidden = false;
                     this.ui.rightArrow.hidden = false;
 
-                    // FIX: Restore Thumbnails
                     const thumbs = document.getElementById('thumbnail-selector');
                     if (thumbs) thumbs.classList.remove('hidden');
                 }
             }
+        });
+
+        // PREVIEW -> DETAIL: Enter magnifier
+        this.viewState.registerHook('detail', 'onEnter', (fromState) => {
+            this.log('Entering DETAIL state');
+            this.ui.imageViewer.classList.remove('transparent');
+            this.ui.fullImageContainer.style.display = 'flex';
+
+            // Completely hide 3D canvas and pause rendering to prevent event leakage/resource usage
+            if (this.mode === '3D') {
+                document.getElementById('gallery-3d').style.display = 'none';
+                this.view3d.pauseRendering();
+            }
+
+            // Update zoom button
+            const zoomBtn = document.getElementById('zoomBtn');
+            if (zoomBtn) {
+                zoomBtn.innerText = '🔙';
+                zoomBtn.title = 'Return to Preview';
+            }
+
+            // Hide arrows in magnifier
+            this.ui.leftArrow.hidden = true;
+            this.ui.rightArrow.hidden = true;
+
+            // Hide Thumbnails in Magnifier Mode
+            const thumbs = document.getElementById('thumbnail-selector');
+            if (thumbs) thumbs.classList.add('hidden');
         });
 
         // PREVIEW -> EXPLORE: Close viewer
@@ -166,9 +169,13 @@ class App {
                 this.view3d.exitLineView();
             }
 
-            // Hide arrows
+            // Explicitly Hide arrows for Grid/Sphere
             this.ui.leftArrow.hidden = true;
             this.ui.rightArrow.hidden = true;
+
+            // Hide Thumbs
+            const thumbs = document.getElementById('thumbnail-selector');
+            if (thumbs) thumbs.classList.add('hidden');
         });
     }
 
@@ -533,6 +540,26 @@ class App {
         // Light Pollution Map
         this.ui.lightPollutionClose.onclick = () => this.hideLightPollutionMap();
 
+        // License Overlay Logic
+        const openLicenseBtn = document.getElementById('openLicense');
+        const closeLicenseBtn = document.getElementById('closeLicense');
+        const licenseOverlay = document.getElementById('licenseOverlay');
+
+        if (openLicenseBtn && licenseOverlay) {
+            openLicenseBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.showLicense();
+            };
+
+            if (closeLicenseBtn) closeLicenseBtn.onclick = () => this.hideLicense();
+
+            // Close on click outside
+            licenseOverlay.onclick = (e) => {
+                if (e.target === licenseOverlay) this.hideLicense();
+            };
+        }
+
         // --- Settings UI Events ---
         const settingsModal = document.getElementById('settingsModal');
         const openSettings = document.getElementById('toggleSettings');
@@ -595,10 +622,12 @@ class App {
                 document.getElementById('set-interval').value = this.settings.get('slideshowInterval');
             };
         }
-        // Listen for messages from Independent Viewer
+        // Listen for messages from Independent Viewers (Immersive & License)
         window.addEventListener('message', (e) => {
             if (e.data.action === 'close') {
                 this.closeFullscreen();
+            } else if (e.data.action === 'closeLicense') {
+                this.hideLicense();
             } else if (e.data.action === 'next') {
                 this.next(true); // Determine next index -> update iframe
             } else if (e.data.action === 'prev') {
@@ -607,6 +636,16 @@ class App {
                 if (!this.isSlideshowActive) this.startSlideshow();
             } else if (e.data.action === 'stopSlideshow') {
                 if (this.isSlideshowActive) this.stopSlideshow();
+            }
+        });
+
+        // Global Escape for any open overlays when focus is on parent
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const licenseOverlay = document.getElementById('licenseOverlay');
+                if (licenseOverlay && licenseOverlay.classList.contains('visible')) {
+                    this.hideLicense();
+                }
             }
         });
     }
@@ -928,7 +967,8 @@ class App {
         const iframe = this.ui.immersiveFrame;
         if (!iframe) return;
 
-        // Global UI remains visible via z-index in unified mode
+        // Ensure Metadata Panel is hidden
+        if (this.ui.metadataViewer) this.ui.metadataViewer.classList.remove('visible');
 
         // Show Iframe Container
         iframe.classList.remove('hidden');
@@ -1050,34 +1090,61 @@ class App {
             this.updateThumbSelector(index);
 
         } else {
-            // 2D Mode -> Use Legacy Viewer (NOT IMMERSIVE FRAME)
+            // 2D Mode -> Use Legacy Viewer for PREVIEW (Restores Navigation)
+            // The unified Immersive Viewer (Iframe) is only used when MAGNIFIED in 2D.
+            // This restores the "transition between images" capability using the global arrows.
+
             // Ensure 3D is hidden/paused
             this.view3d.pauseRendering();
-            // Hide Global UI
-            if (this.ui.topControls) {
-                this.ui.topControls.style.opacity = '0';
-                this.ui.topControls.style.pointerEvents = 'none';
-            }
-            if (this.ui.title) this.ui.title.style.opacity = '0';
 
-            // Ensure Iframe is hidden
+            // Transition State
+            if (this.viewState.getState() !== 'preview') {
+                this.viewState.transition('preview');
+            }
+
+            // Hide Iframe (if it was active)
             if (this.ui.immersiveFrame) {
                 this.ui.immersiveFrame.classList.add('hidden');
                 this.ui.immersiveFrame.style.display = 'none';
             }
 
-            // Show Legacy Viewer
+            // Show Legacy Viewer (Overlay)
             this.ui.imageViewer.hidden = false;
             this.ui.imageViewer.classList.add('visible');
-            this.ui.imageViewer.classList.remove('transparent'); // Solid background
+            this.ui.imageViewer.classList.remove('transparent'); // Solid background for 2D
             this.ui.fullImageContainer.style.display = 'flex';
+
+            // Override Cursor
+            this.ui.imageViewer.style.cursor = 'auto';
 
             // Metadata & Thumbs
             this.updateMetadata(index);
             if (!this.thumbnailsCreated) { this.createThumbSelector(); this.thumbnailsCreated = true; }
             this.updateThumbSelector(index);
 
-            // Mount Image
+            // RESTORE ARROWS for Navigation
+            this.ui.leftArrow.hidden = false;
+            this.ui.rightArrow.hidden = false;
+
+            // Zoom Button -> "Magnify"
+            const zoomBtn = document.getElementById('zoomBtn');
+            if (zoomBtn) {
+                zoomBtn.innerText = '🔍';
+                zoomBtn.title = 'Enter Immersive View';
+            }
+
+            // Hide Global UI Overlay (Title, Top Controls)
+            if (this.ui.topControls) {
+                this.ui.topControls.style.opacity = '0';
+                this.ui.topControls.style.pointerEvents = 'none';
+            }
+            if (this.ui.title) this.ui.title.style.opacity = '0';
+
+            // Hide 2D Grid
+            const g2d = document.getElementById('gallery-2d');
+            if (g2d) g2d.style.display = 'none';
+
+            // Mount the Image (Legacy Way)
             this.mountActiveImage(index, direction);
         }
     }
@@ -1390,119 +1457,211 @@ class App {
 
                 this.activateImmersiveViewer(this.currentIndex);
 
-                // Ensure viewer controls container is visible on top of iframe
-                this.ui.imageViewer.hidden = false;
-                this.ui.imageViewer.classList.add('visible');
-                this.ui.imageViewer.classList.add('transparent');
+                // --- CLEAN UI FIX ---
+                // Hide Legacy Viewer and its global controls (Thumb viewer, Info, Zoom/Magnify, etc.)
+                this.ui.imageViewer.hidden = true;
+                this.ui.imageViewer.classList.remove('visible');
 
+                // Hide Global UI Overlay (Title, Top Controls)
+                if (this.ui.topControls) {
+                    this.ui.topControls.style.opacity = '0';
+                    this.ui.topControls.style.pointerEvents = 'none';
+                }
+                if (this.ui.title) this.ui.title.style.opacity = '0';
 
-                // Thumbs and Arrows stay visible in Unified mode (via z-index)
-
+                // Hide Navigation Arrows & Thumbs
+                this.ui.leftArrow.hidden = true;
+                this.ui.rightArrow.hidden = true;
+                const thumbs = document.getElementById('thumbnail-selector');
+                if (thumbs) thumbs.classList.add('hidden');
 
             } else if (currentState === 'detail') {
-                // Exit DETAIL -> PREVIEW
+                // Exit DETAIL -> PREVIEW (Stay in Line View)
                 this.viewState.transition('preview');
 
                 // Hide Iframe, Show 3D
                 this.ui.immersiveFrame.classList.add('hidden');
                 this.ui.immersiveFrame.style.display = 'none';
+                this.ui.immersiveFrame.src = 'about:blank'; // Stop media
+                window.focus(); // Restore focus to main window for keyboard events
 
                 document.getElementById('gallery-3d').style.display = 'block';
                 this.view3d.resumeRendering();
 
+                // Ensure we stay in Line View centered on current item
+                this.view3d.enterLineView(this.currentIndex);
+
+                // Restore Legacy Viewer visibility for preview logic (controls overlay)
+                this.ui.imageViewer.hidden = false;
+                this.ui.imageViewer.classList.add('visible');
+                this.ui.imageViewer.classList.add('transparent');
+
                 const zoomBtn = document.getElementById('zoomBtn');
                 if (zoomBtn) zoomBtn.innerText = '🔍';
-
-                // Show Thumbs
                 const thumbs = document.getElementById('thumbnail-selector');
                 if (thumbs) thumbs.classList.remove('hidden');
 
                 // Restore Global Arrows (if not slideshow)
                 if (!this.isSlideshowActive) {
-                    this.ui.leftArrow.style.display = 'block';
-                    this.ui.rightArrow.style.display = 'block';
-                    this.ui.leftArrow.hidden = false; // Cleanup
+                    this.ui.leftArrow.hidden = false;
                     this.ui.rightArrow.hidden = false;
                 }
             }
         } else {
-            // 2D Mode: Use the explicit toggle handler if available (Legacy)
-            const btn = document.getElementById('zoomBtn');
-            const thumbs = document.getElementById('thumbnail-selector');
+            // 2D Mode: Toggle between Legacy Preview and Immersive Viewer
+            if (currentState === 'preview') {
+                // Enter Immersive Viewer
+                this.viewState.transition('detail');
 
-            if (this.ui.fullImageContainer.toggleZoom) {
-                const isZoomed = this.ui.fullImageContainer.toggleZoom();
+                // Hide Legacy Image & Viewer UI
+                this.ui.fullImageContainer.style.display = 'none';
+                this.ui.imageViewer.hidden = true;
+                this.ui.imageViewer.classList.remove('visible');
 
-                // Update UI based on new state
-                if (isZoomed) {
-                    // Zoomed In
-                    if (btn) {
-                        btn.innerText = '🔙';
-                        btn.title = "Reset Zoom";
-                    }
-                    if (thumbs) thumbs.classList.add('hidden');
+                // Activate Iframe
+                this.activateImmersiveViewer(this.currentIndex);
 
-                    // Hide Arrows
-                    this.ui.leftArrow.hidden = true;
-                    this.ui.rightArrow.hidden = true;
-                } else {
-                    // Zoomed Out (Reset)
-                    if (btn) {
-                        btn.innerText = '🔍';
-                        btn.title = "Zoom / Magnify";
-                    }
-                    if (thumbs) thumbs.classList.remove('hidden');
-
-                    // Restore Arrows (if not slideshow)
-                    if (!this.isSlideshowActive) {
-                        this.ui.leftArrow.hidden = false;
-                        this.ui.rightArrow.hidden = false;
-                    }
+                // Hide Global UI
+                if (this.ui.topControls) {
+                    this.ui.topControls.style.opacity = '0';
+                    this.ui.topControls.style.pointerEvents = 'none';
                 }
+                if (this.ui.title) this.ui.title.style.opacity = '0';
+
+                // Hide Arrows, Thumbs & Grid
+                this.ui.leftArrow.hidden = true;
+                this.ui.rightArrow.hidden = true;
+                const thumbs = document.getElementById('thumbnail-selector');
+                if (thumbs) thumbs.classList.add('hidden');
+                document.getElementById('gallery-2d').style.display = 'none';
+
+            } else {
+                // Exit Immersive -> Back to Legacy Preview
+                this.viewState.transition('preview');
+
+                // Hide Iframe
+                this.ui.immersiveFrame.classList.add('hidden');
+                this.ui.immersiveFrame.style.display = 'none';
+                this.ui.immersiveFrame.src = 'about:blank'; // Clear to stop media/memory
+                window.focus(); // Restore focus to main window for keyboard events
+
+                // Keep Grid Hidden in Preview (consistent with openFullscreenViewer 2D)
+                document.getElementById('gallery-2d').style.display = 'none';
+
+                // Restore Legacy Image & Viewer UI
+                this.ui.fullImageContainer.style.display = 'flex';
+                this.ui.imageViewer.hidden = false;
+                this.ui.imageViewer.classList.add('visible');
+                this.ui.imageViewer.classList.remove('transparent');
+
+                // Restore Buttons
+                const btn = document.getElementById('zoomBtn');
+                if (btn) {
+                    btn.innerText = '🔍';
+                    btn.title = "Enter Immersive View";
+                }
+
+                // Restore Arrows & Thumbs
+                if (!this.isSlideshowActive) {
+                    this.ui.leftArrow.hidden = false;
+                    this.ui.rightArrow.hidden = false;
+                }
+                const thumbs = document.getElementById('thumbnail-selector');
+                if (thumbs) thumbs.classList.remove('hidden');
             }
         }
     }
 
     closeFullscreen() {
+        const currentState = this.viewState.getState();
+        this.log(`closeFullscreen called from state: ${currentState}`);
+
         // Stop Slideshow
         if (this.isSlideshowActive) this.stopSlideshow();
 
-        // Hide Iframe
+        if (currentState === 'detail') {
+            // If in DETAIL (Immersive Frame), return to PREVIEW (Line View / Legacy Overlay)
+            this.toggleMagnifier();
+            return;
+        }
+
+        // 1. Hide Iframe (Immersive Viewer)
         const iframe = this.ui.immersiveFrame;
         if (iframe) {
             iframe.classList.add('hidden');
             iframe.style.display = 'none';
-            // Reset src to stop video/memory? Optional.
-            iframe.src = 'about:blank';
+            iframe.src = 'about:blank'; // Clear to stop media/memory
         }
 
-        // Hide Legacy Viewer
-        this.ui.imageViewer.classList.remove('visible');
-        this.ui.imageViewer.hidden = true;
-        this.ui.fullImageContainer.innerHTML = '';
-        this.ui.fullImageContainer.style.display = 'none';
-
-        // Close Metadata
-        this.ui.metadataViewer.classList.remove('visible');
-
-        if (this.mode === '3D' && this.viewState.getState() === 'detail') {
-            this.toggleMagnifier();
+        // 2. Hide Legacy Viewer (2DOverlay)
+        if (this.ui.imageViewer) {
+            this.ui.imageViewer.classList.remove('visible');
+            this.ui.imageViewer.hidden = true;
+            this.ui.imageViewer.style.cursor = 'auto'; // Reset cursor
         }
 
+        if (this.ui.fullImageContainer) {
+            this.ui.fullImageContainer.innerHTML = '';
+            this.ui.fullImageContainer.style.display = 'none';
+        }
+
+        // 3. Close Metadata, Thumbs & Arrows
+        if (this.ui.metadataViewer) this.ui.metadataViewer.classList.remove('visible');
+        const thumbs = document.getElementById('thumbnail-selector');
+        if (thumbs) thumbs.classList.add('hidden');
+        if (this.ui.leftArrow) this.ui.leftArrow.hidden = true;
+        if (this.ui.rightArrow) this.ui.rightArrow.hidden = true;
+
+        // 4. TRANSITION STATE
+        // Transition -> 'explore' (Sphere/Grid)
         this.viewState.transition('explore');
 
+        // Force Canvas Visibility & Resume
         if (this.mode === '3D') {
-            document.getElementById('gallery-3d').style.display = 'block';
-            this.view3d.resumeRendering();
+            const g3d = document.getElementById('gallery-3d');
+            if (g3d) {
+                g3d.style.display = 'block';
+                requestAnimationFrame(() => {
+                    this.view3d.resumeRendering();
+                    // Exit line view to return to sphere
+                    this.view3d.exitLineView();
+                });
+            }
+        } else {
+            const g2d = document.getElementById('gallery-2d');
+            if (g2d) g2d.style.display = 'grid';
         }
 
-        // Restore Global Top Controls
+        // 5. Restore Global UI
         if (this.ui.topControls) {
             this.ui.topControls.style.opacity = '1';
             this.ui.topControls.style.pointerEvents = 'auto';
             this.ui.topControls.style.visibility = 'visible';
         }
         if (this.ui.title) this.ui.title.style.opacity = '0.9';
+
+        this.log("Fullscreen Closed. Returned to Explore.");
+    }
+
+    showLicense() {
+        const overlay = document.getElementById('licenseOverlay');
+        const iframe = document.getElementById('licenseIframe');
+        if (overlay && iframe) {
+            iframe.src = 'license.html';
+            overlay.classList.add('visible');
+        }
+    }
+
+    hideLicense() {
+        const overlay = document.getElementById('licenseOverlay');
+        const iframe = document.getElementById('licenseIframe');
+        if (overlay && iframe) {
+            overlay.classList.remove('visible');
+            setTimeout(() => {
+                iframe.src = 'about:blank';
+                window.focus();
+            }, 300);
+        }
     }
 
     createThumbSelector() {

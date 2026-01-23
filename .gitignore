@@ -5,3 +5,5 @@ metadata/
 thumbs/
 images/
 img/
+.venv/
+_site

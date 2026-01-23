@@ -4,12 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pro Immersive Viewer</title>
+    <title>Immersive Viewer</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🖼️</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
     <style>
         :root {
             --bg-color: #000000;
             --ui-bg: rgba(20, 20, 20, 0.9);
-            --accent: #ffffff;
             --text: #ffffff;
         }
 
@@ -20,10 +22,12 @@
             overflow: hidden;
             width: 100vw;
             height: 100vh;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             color: var(--text);
             touch-action: none;
             user-select: none;
+            /* Prevents overscroll bounce on Mac/iOS */
+            overscroll-behavior: none;
         }
 
         /* --- Canvas/Image Area --- */
@@ -33,6 +37,8 @@
             position: relative;
             cursor: grab;
             overflow: hidden;
+            background-color: var(--bg-color);
+            /* Removed 3D perspective to prevent clipping at extreme zoom scales */
         }
 
         #viewport:active {
@@ -43,11 +49,28 @@
             position: absolute;
             top: 0;
             left: 0;
-            /* Transform Origin 0 0 is crucial for the matrix math to work simply */
             transform-origin: 0 0;
+
+            /* GPU Layer Promotion */
             will-change: transform;
+
+            /* High-quality rendering */
+            image-rendering: auto;
+
+            /* Remove backface-visibility as it can cause tiling errors in 2D zoom */
             pointer-events: none;
-            box-shadow: 0 0 100px rgba(0, 0, 0, 0.8);
+
+            /* Mobile optimization */
+            -webkit-user-drag: none;
+            -webkit-user-select: none;
+            user-select: none;
+
+            /* The image itself should occupy its natural dimensions; transform logic will scale it */
+            max-width: none;
+            max-height: none;
+
+            /* Simplified shadow - complex shadows induce tiling artifacts on large layers */
+            filter: drop-shadow(0 0 20px rgba(0, 0, 0, 0.5));
         }
 
         /* --- UI Overlay: Empty State --- */
@@ -71,13 +94,7 @@
             padding: 40px;
             border-radius: 8px;
             text-align: center;
-            transition: all 0.2s;
             background: #111;
-        }
-
-        .upload-box:hover {
-            border-color: #666;
-            background: #1a1a1a;
         }
 
         .btn-upload {
@@ -86,14 +103,39 @@
             padding: 10px 24px;
             color: white;
             border-radius: 4px;
-            font-size: 0.9rem;
             cursor: pointer;
             margin-top: 15px;
-            transition: background 0.2s;
         }
 
         .btn-upload:hover {
             background: #555;
+        }
+
+        .btn-load:hover {
+            background: #666;
+        }
+
+        #url-input-container {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        #url-input {
+            background: #222;
+            border: 1px solid #444;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            flex-grow: 1;
+            outline: none;
+            font-size: 0.9rem;
+        }
+
+        #url-input:focus {
+            border-color: #666;
         }
 
         /* --- UI Overlay: HUD --- */
@@ -153,12 +195,11 @@
 
         .info-panel {
             position: absolute;
-            top: 20px;
+            top: 40px;
             left: 20px;
             color: rgba(255, 255, 255, 0.5);
             font-size: 12px;
             font-family: monospace;
-            letter-spacing: 1px;
         }
 
         .loader {
@@ -181,6 +222,64 @@
                 transform: translate(-50%, -50%) rotate(360deg);
             }
         }
+
+        /* --- Metadata Panel --- */
+        #metadata-panel {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            background: var(--ui-bg);
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 280px;
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            z-index: 600;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            pointer-events: auto;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+            transition: opacity 0.4s cubic-bezier(0.2, 0, 0.2, 1), transform 0.4s cubic-bezier(0.2, 0, 0.2, 1);
+            opacity: 0;
+            transform: translateX(-15px);
+        }
+
+        #metadata-panel.visible {
+            display: flex;
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            line-height: 1.4;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 8px;
+        }
+
+        .meta-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .meta-label {
+            color: rgba(255, 255, 255, 0.45);
+            font-weight: 400;
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        .meta-value {
+            color: rgba(255, 255, 255, 0.95);
+            text-align: right;
+            padding-left: 20px;
+            font-family: inherit;
+        }
     </style>
 </head>
 
@@ -189,7 +288,15 @@
     <div id="empty-state">
         <div class="upload-box" id="drop-zone">
             <h2 style="margin: 0 0 10px 0; font-weight: 300;">Viewer</h2>
-            <p style="color: #666; font-size: 0.9rem; margin-bottom: 20px;">Drag image or paste URL</p>
+            <p style="color: #666; font-size: 0.9rem; margin-bottom: 15px;">Drag image, paste URL, or select file</p>
+
+            <div id="url-input-container">
+                <input type="text" id="url-input" placeholder="https://example.com/image.jpg">
+                <button class="btn-load" id="btn-load-url">Load</button>
+            </div>
+
+            <div style="margin: 15px 0; color: #444; font-size: 0.8rem;">— OR —</div>
+
             <input type="file" id="file-input" accept="image/*" style="display: none">
             <button class="btn-upload" onclick="document.getElementById('file-input').click()">Open File</button>
         </div>
@@ -224,6 +331,12 @@
                     <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
                 </svg>
             </button>
+            <button class="icon-btn" id="btn-info" title="Information (I)">
+                <svg viewBox="0 0 24 24">
+                    <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+                </svg>
+            </button>
             <button class="icon-btn" id="btn-close" title="Close/New">
                 <svg viewBox="0 0 24 24">
                     <path
@@ -231,23 +344,21 @@
                 </svg>
             </button>
         </div>
+        <div id="metadata-panel">
+            <!-- Content injected via JS -->
+        </div>
     </div>
 
     <script>
-        // --- Configuration ---
         const CONFIG = {
             minScale: 0.05,
-            maxScale: 100, // Deep zoom
-            wheelSensitivity: 0.001, // Smoother wheel
-            panFriction: 0.08, // Physics feel
+            maxScale: 100,
+            wheelSensitivity: 0.001
         };
 
-        // --- State ---
         const state = {
             x: 0, y: 0, scale: 1,
-            // Image Dimensions
             w: 0, h: 0,
-            // Interaction
             isDragging: false,
             pointers: new Map(),
             lastDist: 0,
@@ -259,19 +370,61 @@
             img: document.getElementById('target-image'),
             empty: document.getElementById('empty-state'),
             loader: document.getElementById('loader'),
-            info: document.getElementById('info-text')
+            info: document.getElementById('info-text'),
+            fileInput: document.getElementById('file-input')
         };
 
-        // --- Initialization ---
         function init() {
             const params = new URLSearchParams(window.location.search);
-            const src = params.get('img');
-            if (src) loadImg(src);
+
+            // 1. Hide Upload immediately if img param exists
+            if (params.get('img')) {
+                el.empty.style.display = 'none'; // Instant hide
+                loadImg(params.get('img'));
+            }
 
             setupInputs();
             setupUI();
 
-            // Re-center on window resize
+            // 2. Iframe / Embedded Adjustments
+            if (window.self !== window.top) {
+                // We are in an iframe
+                document.body.classList.add('in-iframe');
+
+                // Hide Fullscreen and Reset buttons in embedded mode (Main Gallery logic usually handles this)
+                // User Request: "Controls for main gallery should dissapear" -> This usually refers to the TOP controls of the parent.
+                // But for THIS file, "only a close button should appear" implies we might want to hide our own toolbar?
+                // Wait, "Controls bumping too closely to the footer of gallery if its in an iframe".
+                // This implies we need padding.
+
+                const toolbar = document.querySelector('.toolbar');
+                if (toolbar) {
+                    toolbar.style.bottom = '80px'; // Move up to avoid parent footer overlap
+                }
+
+                // Controls hiding logic
+                const buttonsToHide = ['btn-reset', 'btn-minus', 'btn-plus', 'btn-fs'];
+
+                buttonsToHide.forEach(id => {
+                    const btn = document.getElementById(id);
+                    if (btn) {
+                        // Show fullscreen button if loaded via URL param, otherwise hide
+                        if (id === 'btn-fs' && params.get('img')) {
+                            btn.style.display = 'flex';
+                        } else {
+                            btn.style.display = 'none';
+                        }
+                    }
+                });
+
+                // Adjust toolbar since it now only has one button
+                if (toolbar) {
+                    toolbar.style.justifyContent = 'center';
+                    toolbar.style.width = 'auto';
+                    toolbar.style.padding = '8px'; // Smaller padding
+                }
+            }
+
             window.addEventListener('resize', () => {
                 if (state.w > 0) constrainAndRender();
             });
@@ -280,42 +433,48 @@
         function loadImg(src) {
             el.loader.style.display = 'block';
             el.img.style.opacity = '0';
+            el.img.style.transform = 'translate3d(0,0,0) scale(1)'; // Reset transform while loading
 
             const img = new Image();
-            img.src = src;
             img.onload = () => {
                 el.img.src = src;
                 state.w = img.naturalWidth;
                 state.h = img.naturalHeight;
 
-                resetView(); // Center image immediately
+                // Explicitly set dimensions to prevent layout recalculations
+                el.img.style.width = state.w + 'px';
+                el.img.style.height = state.h + 'px';
 
-                el.loader.style.display = 'none';
-                el.img.style.opacity = '1';
-                el.empty.style.opacity = '0';
-                setTimeout(() => el.empty.style.display = 'none', 300);
+                // Allow a tiny delay for the browser to parse the high-res image before showing
+                setTimeout(() => {
+                    resetView();
+                    fetchMetadata(src); // Fetch metadata for this image (using src)
+                    el.loader.style.display = 'none';
+                    el.img.style.opacity = '1';
+                    el.empty.style.display = 'none';
+                }, 50);
             };
             img.onerror = () => {
                 el.loader.style.display = 'none';
-                alert('Could not load image');
+                console.error('Failed to load image:', src);
             };
+            img.src = src;
         }
 
-        // --- Core Math (Zoom/Pan) ---
-
         function resetView() {
-            // Calculate scale to fit "contain" style
+            if (state.w === 0 || state.h === 0) return;
+
             const vw = window.innerWidth;
             const vh = window.innerHeight;
 
+            // Calculate scale to fit the image entirely (contain)
             const scaleX = vw / state.w;
             const scaleY = vh / state.h;
 
-            // Choose smaller scale (fit), minus a little padding (0.9)
-            state.scale = Math.min(scaleX, scaleY) * 0.9;
+            // Initial fit should be comfortable with a bit of padding (0.95)
+            state.scale = Math.min(scaleX, scaleY) * 0.95;
 
-            // Center calculation
-            // Center X = (ViewWidth - ImageWidth * Scale) / 2
+            // Center
             state.x = (vw - state.w * state.scale) / 2;
             state.y = (vh - state.h * state.scale) / 2;
 
@@ -325,16 +484,10 @@
         function zoomAt(factor, cx, cy) {
             const oldScale = state.scale;
             let newScale = oldScale * factor;
-
-            // Clamp Zoom
             newScale = Math.max(CONFIG.minScale, Math.min(CONFIG.maxScale, newScale));
-
-            // Math: The point under the mouse (cx, cy) must stay static.
-            // Formula: newPos = Mouse - (Mouse - oldPos) * (newScale / oldScale)
             state.x = cx - (cx - state.x) * (newScale / oldScale);
             state.y = cy - (cy - state.y) * (newScale / oldScale);
             state.scale = newScale;
-
             constrainAndRender();
         }
 
@@ -344,61 +497,43 @@
             constrainAndRender();
         }
 
-        // --- Constraints & Rendering ---
-
         function constrainAndRender() {
-            // This function ensures you can't lose the image completely.
-            // It allows you to drag it off screen, but keeps a "handle" visible.
-
             const vw = window.innerWidth;
             const vh = window.innerHeight;
             const currentW = state.w * state.scale;
             const currentH = state.h * state.scale;
-
-            // Margin: How many pixels of the image must remain on screen
             const margin = 100;
 
-            // Hard constraints (can't go fully off screen)
             if (state.x > vw - margin) state.x = vw - margin;
             if (state.x + currentW < margin) state.x = margin - currentW;
-
             if (state.y > vh - margin) state.y = vh - margin;
             if (state.y + currentH < margin) state.y = margin - currentH;
 
-            // Apply Transform
+            // Updated Transform: explicitly using translate3d for GPU layer
             el.img.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scale(${state.scale})`;
 
-            // Update HUD
             const pct = Math.round(state.scale * 100);
             el.info.textContent = `${state.w}x${state.h} • ${pct}%`;
         }
 
-        // --- Input Handling (Unified) ---
-
         function setupInputs() {
             const v = el.view;
 
-            // Mouse Wheel (Zoom)
             v.addEventListener('wheel', (e) => {
                 e.preventDefault();
-                // Normalize wheel delta for different devices
                 const delta = -e.deltaY;
-                // Exponential zoom factor
                 const factor = Math.pow(1 + CONFIG.wheelSensitivity, delta);
                 zoomAt(factor, e.clientX, e.clientY);
             }, { passive: false });
 
-            // Pointer Events (Mouse/Touch)
             v.addEventListener('pointerdown', (e) => {
                 state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
                 v.setPointerCapture(e.pointerId);
                 state.isDragging = true;
 
-                // Track start point for drag calculation
                 if (state.pointers.size === 1) {
                     state.lastPoint = { x: e.clientX, y: e.clientY };
                 } else if (state.pointers.size === 2) {
-                    // Initialize Pinch
                     const p = Array.from(state.pointers.values());
                     state.lastDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
                 }
@@ -407,23 +542,15 @@
             v.addEventListener('pointermove', (e) => {
                 if (!state.pointers.has(e.pointerId)) return;
                 e.preventDefault();
-
-                // Update current pointer position
                 state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
                 const pointers = Array.from(state.pointers.values());
 
                 if (state.pointers.size === 1 && state.isDragging) {
-                    // Pan Logic
                     const dx = e.clientX - state.lastPoint.x;
                     const dy = e.clientY - state.lastPoint.y;
-
                     pan(dx, dy);
-
                     state.lastPoint = { x: e.clientX, y: e.clientY };
-                }
-                else if (state.pointers.size === 2) {
-                    // Pinch Logic
+                } else if (state.pointers.size === 2) {
                     const p1 = pointers[0];
                     const p2 = pointers[1];
                     const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
@@ -435,8 +562,6 @@
                         zoomAt(factor, cx, cy);
                     }
                     state.lastDist = dist;
-
-                    // Also update drag point to center of pinch to prevent jumps
                     state.lastPoint = { x: cx, y: cy };
                 }
             });
@@ -445,7 +570,6 @@
                 state.pointers.delete(e.pointerId);
                 state.isDragging = state.pointers.size > 0;
                 if (state.pointers.size < 2) state.lastDist = 0;
-                // If switching from 2 fingers to 1, reset the drag anchor
                 if (state.pointers.size === 1) {
                     const p = state.pointers.values().next().value;
                     state.lastPoint = { x: p.x, y: p.y };
@@ -453,11 +577,8 @@
             };
             v.addEventListener('pointerup', end);
             v.addEventListener('pointercancel', end);
-
-            // Double click reset
             v.addEventListener('dblclick', resetView);
 
-            // Drag and Drop
             document.addEventListener('dragover', e => e.preventDefault());
             document.addEventListener('drop', (e) => {
                 e.preventDefault();
@@ -467,11 +588,17 @@
                     reader.readAsDataURL(e.dataTransfer.files[0]);
                 }
             });
+
+            el.fileInput.addEventListener('change', (e) => {
+                if (e.target.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => loadImg(ev.target.result);
+                    reader.readAsDataURL(e.target.files[0]);
+                }
+            });
         }
 
-        // --- UI Logic ---
         function setupUI() {
-            // Hide HUD on idle
             let timer;
             const wake = () => {
                 document.getElementById('hud').classList.remove('hud-hidden');
@@ -483,22 +610,173 @@
             window.addEventListener('pointermove', wake);
             window.addEventListener('keydown', wake);
 
-            // Button actions
             document.getElementById('btn-reset').onclick = resetView;
             document.getElementById('btn-plus').onclick = () => zoomAt(1.5, window.innerWidth / 2, window.innerHeight / 2);
             document.getElementById('btn-minus').onclick = () => zoomAt(0.66, window.innerWidth / 2, window.innerHeight / 2);
+            document.getElementById('btn-info').onclick = toggleMetadata;
+
+            // Close Action
             document.getElementById('btn-close').onclick = () => {
-                el.empty.style.display = 'flex';
-                setTimeout(() => el.empty.style.opacity = '1', 10);
-                el.img.src = '';
+                // If in iframe, message parent
+                if (window.self !== window.top) {
+                    window.parent.postMessage({ action: 'close' }, '*');
+                } else {
+                    el.empty.style.display = 'flex';
+                    setTimeout(() => el.empty.style.opacity = '1', 10);
+                    el.img.src = '';
+                }
             };
+
             document.getElementById('btn-fs').onclick = () => {
                 if (!document.fullscreenElement) document.documentElement.requestFullscreen();
                 else document.exitFullscreen();
             };
+
+            // Keyboard Shortcuts
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (window.self !== window.top) {
+                        window.parent.postMessage({ action: 'close' }, '*');
+                    } else {
+                        document.getElementById('btn-close').click();
+                    }
+                }
+                if (e.key === 'r' || e.key === 'R') resetView();
+                if (e.key === 'f' || e.key === 'F') document.getElementById('btn-fs').click();
+                if (e.key === 'i' || e.key === 'I') toggleMetadata();
+            });
+
+            // URL Loading (Empty State)
+            const urlInput = document.getElementById('url-input');
+            const loadUrlBtn = document.getElementById('btn-load-url');
+            if (loadUrlBtn && urlInput) {
+                const handleLoad = () => {
+                    const url = urlInput.value.trim();
+                    if (url) loadImg(url);
+                };
+                loadUrlBtn.onclick = handleLoad;
+                urlInput.onkeydown = (e) => { if (e.key === 'Enter') handleLoad(); };
+            }
+
         }
 
-        // Start
+        let metadataCache = null;
+        async function fetchMetadata(imageName) {
+            if (!imageName) return;
+            try {
+                if (!metadataCache) {
+                    const response = await fetch('./metadata/metadata.json');
+                    metadataCache = await response.json();
+                }
+                // Extract the key (filename without extension) from the path
+                // e.g. "./fulls/6.jpg" -> "6"
+                const key = imageName.split('/').pop().replace('.jpg', '');
+                const info = metadataCache[key] || {};
+
+                // Store the original source for the display header
+                info._originalSrc = imageName;
+
+                renderMetadata(info);
+            } catch (e) {
+                console.error("Error loading metadata", e);
+                renderMetadata({ _originalSrc: imageName });
+            }
+        }
+
+        function renderMetadata(info) {
+            const panel = document.getElementById('metadata-panel');
+
+            // Formatting helpers matching app.js
+            const safeEval = (s) => { try { return eval(s); } catch { return s; } };
+
+            const exifToDate = (ts) => {
+                if (!ts) return 'N/A';
+                try {
+                    const [d, t] = ts.split(' ');
+                    const date = new Date(d.replace(/:/g, '/') + ' ' + t);
+                    return isNaN(date) ? 'N/A' : date.toLocaleDateString('en-US', {
+                        year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                    });
+                } catch (e) { return 'N/A'; }
+            };
+
+            const convertDegrees = (valStr) => {
+                const matches = valStr.match(/(\d+\s*\/\s*\d+|\d+(\.\d+)?)/g);
+                if (!matches || matches.length < 3) return NaN;
+                const parts = matches.map(s => {
+                    if (s.includes('/')) {
+                        const [n, d] = s.split('/').map(Number);
+                        return n / d;
+                    }
+                    return Number(s);
+                });
+                return parts[0] + (parts[1] / 60) + (parts[2] / 3600);
+            };
+
+            const getGPS = (d) => {
+                const lat = d['GPS GPSLatitude'], latRef = d['GPS GPSLatitudeRef'];
+                const lon = d['GPS GPSLongitude'], lonRef = d['GPS GPSLongitudeRef'];
+                if (lat && latRef && lon && lonRef) {
+                    let layout = convertDegrees(lat);
+                    if (latRef === 'S') layout *= -1;
+                    let long = convertDegrees(lon);
+                    if (lonRef === 'W') long *= -1;
+                    if (!isNaN(layout) && !isNaN(long)) return `${layout.toFixed(4)}, ${long.toFixed(4)}`;
+                }
+                return 'N/A';
+            };
+
+            const w = info['Image Width'] || 'N/A';
+            const h = info['Image Height'] || 'N/A';
+            const mp = (w !== 'N/A' && h !== 'N/A') ? (w * h / 1000000).toFixed(1) + ' MP' : 'N/A';
+            const size = info['File Size'] ? (info['File Size'] / (1000 * 1000)).toFixed(2) + ' MB' : 'N/A';
+            const model = info['Image Model'] || 'N/A';
+            const iso = info['EXIF ISOSpeedRatings'] ? safeEval(info['EXIF ISOSpeedRatings']) : 'N/A';
+            const f = info['EXIF FNumber'] ? 'f/' + safeEval(info['EXIF FNumber']) : 'N/A';
+            const focal = info['EXIF FocalLength'] ? safeEval(info['EXIF FocalLength']) + 'mm' : 'N/A';
+            const expRaw = info['EXIF ExposureTime'] ? safeEval(info['EXIF ExposureTime']) : 'N/A';
+            const exp = (typeof expRaw === 'number' && expRaw < 0.1 && expRaw > 0) ? `1/${Math.round(1 / expRaw)}s` : (expRaw === 'N/A' ? 'N/A' : expRaw + 's');
+            const date = exifToDate(info['Image DateTime']);
+            const gps = getGPS(info);
+
+            // Extract filename for the header
+            const fileName = info._originalSrc ? info._originalSrc.split('/').pop() : 'Direct Upload';
+
+            const displayFields = [
+                { label: 'Capture Date', value: date },
+                { label: 'Coordinates', value: gps },
+                { label: 'Camera', value: model },
+                { label: 'Resolution', value: (w !== 'N/A') ? `${w} x ${h} (${mp})` : 'N/A' },
+                { label: 'Exposure', value: exp },
+                { label: 'Aperture', value: f },
+                { label: 'ISO', value: iso },
+                { label: 'Focal', value: focal },
+                { label: 'File Size', value: size }
+            ];
+
+            panel.innerHTML = `
+                <div style="margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+                    <div style="font-size: 10px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 1px;">Filename</div>
+                    <div style="font-size: 14px; color: white; word-break: break-all;">${fileName}</div>
+                </div>
+                <h3 style="margin:15px 0 10px 0; font-weight:300; font-size:14px; letter-spacing:1px; color:rgba(255,255,255,0.5);">IMAGE INFO</h3>
+            `;
+
+            displayFields.forEach(f => {
+                const row = document.createElement('div');
+                row.className = 'meta-row';
+                const val = (f.value === null || f.value === undefined || f.value === '' || String(f.value).includes('undefined')) ? 'N/A' : f.value;
+                row.innerHTML = `<span class="meta-label">${f.label}</span><span class="meta-value">${val}</span>`;
+                panel.appendChild(row);
+            });
+        }
+
+        function toggleMetadata() {
+            const panel = document.getElementById('metadata-panel');
+            panel.classList.toggle('visible');
+        }
+
         init();
     </script>
 </body>

@@ -853,3 +853,77 @@ input[type="range"]::-webkit-slider-thumb:hover {
     font-size: 1.2rem;
     cursor: pointer;
 }
+
+/* License Overlay (Matches Light Pollution Overlay) */
+#licenseOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s;
+}
+
+#licenseOverlay.visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+#licenseContainer {
+    width: 90%;
+    max-width: 800px;
+    height: 80%;
+    position: relative;
+    background: #000;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #333;
+    box-shadow: 0 0 50px rgba(0,0,0,0.8);
+}
+
+.license-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #111;
+    border-bottom: 1px solid #222;
+}
+
+.license-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: #fff;
+    font-weight: 400;
+}
+
+#closeLicense {
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: color 0.2s;
+    padding: 0;
+}
+
+#closeLicense:hover {
+    color: #fff;
+}
+
+#licenseIframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #000;
+}

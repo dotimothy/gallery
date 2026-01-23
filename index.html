@@ -113,8 +113,9 @@
 
         <!-- Home / Footer -->
         <footer>
-            <h2>© <a href="https://timothydo.me/photography" target="_blank">TheDoShoots</a> 2025. By Timothy Do. All
-                Rights Reserved.</h2>
+            <h2>© <a href="https://timothydo.me/photography" target="_blank">TheDoShoots</a> 2026. By Timothy Do. <a
+                    href="#" id="openLicense">All Rights Reserved</a>. <a href="https://github.com/dotimothy/gallery"
+                    target="_blank">GitHub</a>.</h2>
         </footer>
     </div>
 
@@ -155,6 +156,17 @@
         <div id="lightPollutionMapContainer">
             <iframe id="lightPollutionMapIframe" frameborder="0" scrolling="no"></iframe>
             <button id="lightPollutionMapCloseButton">✖️</button>
+        </div>
+    </div>
+
+    <!-- License Overlay (Iframe) -->
+    <div id="licenseOverlay" class="hidden">
+        <div id="licenseContainer">
+            <div class="license-header">
+                <h2>License</h2>
+                <button id="closeLicense">✖️</button>
+            </div>
+            <iframe id="licenseIframe" src="about:blank"></iframe>
         </div>
     </div>
 

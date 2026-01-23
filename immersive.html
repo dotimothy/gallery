@@ -303,20 +303,68 @@
             text-decoration: underline;
         }
 
-        #map-container {
-            margin-top: 15px;
-            width: 100%;
-            height: 200px;
-            border-radius: 8px;
-            overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            background: #000;
+        #map-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 2000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
 
-        #map-panel-iframe {
+        #map-overlay.visible {
+            display: flex;
+            opacity: 1;
+        }
+
+        .map-modal {
+            width: 90%;
+            max-width: 1000px;
+            height: 80%;
+            background: #111;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.8);
+        }
+
+        #map-overlay-iframe {
             width: 100%;
             height: 100%;
             border: none;
+        }
+
+        .btn-close-map {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-close-map:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
     </style>
 </head>
@@ -337,6 +385,18 @@
 
             <input type="file" id="file-input" accept="image/*" style="display: none">
             <button class="btn-upload" onclick="document.getElementById('file-input').click()">Open File</button>
+        </div>
+    </div>
+
+    <div id="map-overlay" onclick="hideMap()">
+        <div class="map-modal" onclick="event.stopPropagation()">
+            <button class="btn-close-map" onclick="hideMap()">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path
+                        d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                </svg>
+            </button>
+            <iframe id="map-overlay-iframe" title="Light Pollution Map"></iframe>
         </div>
     </div>
 
@@ -674,6 +734,11 @@
             window.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
                     e.preventDefault();
+                    const mapOverlay = document.getElementById('map-overlay');
+                    if (mapOverlay && mapOverlay.classList.contains('visible')) {
+                        hideMap();
+                        return;
+                    }
                     if (window.self !== window.top) {
                         window.parent.postMessage({ action: 'close' }, '*');
                     } else {
@@ -784,7 +849,7 @@
             const exp = (typeof expRaw === 'number' && expRaw < 0.1 && expRaw > 0) ? `1/${Math.round(1 / expRaw)}s` : (expRaw === 'N/A' ? 'N/A' : expRaw + 's');
             const date = exifToDate(info['Image DateTime']);
             const gpsData = getGPSData(info);
-            const gpsDisplay = gpsData ? `<a href="${gpsData.url}" target="_blank" class="meta-link">${gpsData.display}</a>` : 'N/A';
+            const gpsDisplay = gpsData ? `<a href="#" onclick="showMap('${gpsData.url}'); return false;" class="meta-link">${gpsData.display}</a>` : 'N/A';
 
             // Extract filename for the header
             const fileName = info._originalSrc ? info._originalSrc.split('/').pop() : 'Direct Upload';
@@ -816,28 +881,28 @@
                 row.innerHTML = `<span class="meta-label">${f.label}</span><span class="meta-value">${val}</span>`;
                 panel.appendChild(row);
             });
-
-            // Add Map Iframe if GPS is available
-            if (gpsData) {
-                const mapTitle = document.createElement('h3');
-                mapTitle.style.cssText = "margin:20px 0 10px 0; font-weight:300; font-size:14px; letter-spacing:1px; color:rgba(255,255,255,0.5);";
-                mapTitle.textContent = "LIGHT POLLUTION";
-                panel.appendChild(mapTitle);
-
-                const mapContainer = document.createElement('div');
-                mapContainer.id = 'map-container';
-                const iframe = document.createElement('iframe');
-                iframe.id = 'map-panel-iframe';
-                iframe.src = gpsData.url;
-                iframe.title = "Light Pollution Map";
-                mapContainer.appendChild(iframe);
-                panel.appendChild(mapContainer);
-            }
         }
 
         function toggleMetadata() {
             const panel = document.getElementById('metadata-panel');
             panel.classList.toggle('visible');
+        }
+
+        function showMap(url) {
+            const overlay = document.getElementById('map-overlay');
+            const iframe = document.getElementById('map-overlay-iframe');
+            iframe.src = url;
+            overlay.style.display = 'flex';
+            setTimeout(() => overlay.classList.add('visible'), 10);
+        }
+
+        function hideMap() {
+            const overlay = document.getElementById('map-overlay');
+            overlay.classList.remove('visible');
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                document.getElementById('map-overlay-iframe').src = '';
+            }, 300);
         }
 
         init();

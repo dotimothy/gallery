@@ -14,7 +14,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 
     <!-- App CSS -->
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=2">
 </head>
 
 <body>
@@ -44,11 +44,47 @@
 
 
         <!-- Toggle Switch -->
-        <div id="top-controls">
-            <button id="refresh" onclick="window.location.reload()">🔄</button>
-            <button id="toggleSettings" title="Settings">⚙️</button>
-            <button id="global-fullscreen" title="Go Fullscreen">⛶</button>
-            <button id="mode-toggle">3D</button>
+        <!-- Toggle Switch & Controls -->
+        <div id="controls-container">
+            <button id="controls-toggle" title="Menu" aria-label="Toggle Menu">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-menu">
+                    <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-close hidden">
+                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+            </button>
+
+            <div id="controls-list">
+                <button id="refresh" title="Reload Gallery">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6M1 20v-6h6" />
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg>
+                </button>
+                <button id="toggleSettings" title="Settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path
+                            d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                </button>
+                <button id="global-fullscreen" title="Go Fullscreen">
+                    <svg class="icon-expand" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <path
+                            d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                    </svg>
+                    <svg class="icon-compress hidden" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <path
+                            d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                    </svg>
+                </button>
+                <button id="mode-toggle" class="text-btn">3D</button>
+            </div>
         </div>
 
         <!-- Settings Modal -->
@@ -132,13 +168,70 @@
     <!-- 2D Fullscreen Viewer Overlay (classic behavior) -->
     <div id="imageViewer" hidden>
         <!-- Controls Container -->
-        <div id="viewer-controls">
-            <button id="toggleThumbs" title="Toggle Palette">🖼️</button>
-            <button id="viewer-slideshow" title="Toggle Slideshow">▶️</button>
-            <button id="toggleMetadata" title="Info">ℹ️</button>
-            <button id="zoomBtn" title="Zoom / Magnify">🔍</button>
-            <button id="fullscreenToggle" title="Fullscreen">⛶</button>
-            <button id="exitViewer" title="Close">✖️</button>
+        <!-- Controls Container -->
+        <div id="viewer-controls-container">
+            <button id="viewer-controls-toggle" title="Viewer Menu" aria-label="Toggle Viewer Menu">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-menu">
+                    <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-close hidden">
+                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+            </button>
+            <div id="viewer-controls-list">
+                <button id="exitViewer" title="Close Viewer">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6L18 18" />
+                    </svg>
+                </button>
+                <button id="fullscreenToggle" title="Fullscreen">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path
+                            d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                    </svg>
+                </button>
+                <button id="zoomBtn" title="Zoom / Magnify">
+                    <svg class="icon-zoom" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        <line x1="11" y1="8" x2="11" y2="14"></line>
+                        <line x1="8" y1="11" x2="14" y2="11"></line>
+                    </svg>
+                    <svg class="icon-back hidden" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <button id="toggleMetadata" title="Info">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <circle cx="12" cy="8" r="2" fill="currentColor" stroke="none"></circle>
+                    </svg>
+                </button>
+                <button id="viewer-slideshow" title="Toggle Slideshow">
+                    <svg class="icon-play" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    <svg class="icon-pause hidden" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <rect x="6" y="4" width="4" height="16"></rect>
+                        <rect x="14" y="4" width="4" height="16"></rect>
+                    </svg>
+                </button>
+                <button id="toggleThumbs" title="Toggle Palette">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                </button>
+            </div>
         </div>
 
         <div id="full-image-container"></div>
@@ -171,7 +264,7 @@
     </div>
 
     <!-- App JS -->
-    <script type="module" src="js/app.js"></script>
+    <script type="module" src="js/app.js?v=2"></script>
 </body>
 
 </html>

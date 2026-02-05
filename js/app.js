@@ -32,7 +32,13 @@ class App {
         this.ui = {
             title: document.getElementById('title'),
             toggle: document.getElementById('mode-toggle'),
-            topControls: document.getElementById('top-controls'), // Added
+            controlsContainer: document.getElementById('controls-container'), // New
+            controlsToggle: document.getElementById('controls-toggle'), // New
+
+            // Viewer Controls
+            viewerControlsContainer: document.getElementById('viewer-controls-container'),
+            viewerControlsToggle: document.getElementById('viewer-controls-toggle'),
+
             viewerSlideshow: document.getElementById('viewer-slideshow'), // Added
             metadataViewer: document.getElementById('metadataViewer'),
             toggleMetadata: document.getElementById('toggleMetadata'),
@@ -48,14 +54,13 @@ class App {
             lightPollutionIframe: document.getElementById('lightPollutionMapIframe'),
             loadingScreen: document.getElementById('loading-screen'),
             immersiveFrame: document.getElementById('immersive-frame'), // Added
+            refresh: document.getElementById('refresh'),
         };
 
         // Initialize Views
         this.view3d = new View3D(document.getElementById('gallery-3d'));
-        // this.view3d.init() is called in loadData after we have images
-
         this.view2d = new View2D(document.getElementById('gallery-2d'));
-        // this.view2d.init() is called in loadData
+        // (Init called in loadData)
 
         // Settings System
         this.settings = new SettingsManager((key, value) => this.applySetting(key, value), this.isMobile);
@@ -107,7 +112,10 @@ class App {
                 // Update zoom button
                 const zoomBtn = document.getElementById('zoomBtn');
                 if (zoomBtn) {
-                    zoomBtn.innerText = '🔍';
+                    const iconZoom = zoomBtn.querySelector('.icon-zoom');
+                    const iconBack = zoomBtn.querySelector('.icon-back');
+                    if (iconZoom) iconZoom.classList.remove('hidden');
+                    if (iconBack) iconBack.classList.add('hidden');
                     zoomBtn.title = 'Zoom / Magnify';
                 }
 
@@ -137,7 +145,10 @@ class App {
             // Update zoom button
             const zoomBtn = document.getElementById('zoomBtn');
             if (zoomBtn) {
-                zoomBtn.innerText = '🔙';
+                const iconZoom = zoomBtn.querySelector('.icon-zoom');
+                const iconBack = zoomBtn.querySelector('.icon-back');
+                if (iconZoom) iconZoom.classList.add('hidden');
+                if (iconBack) iconBack.classList.remove('hidden');
                 zoomBtn.title = 'Return to Preview';
             }
 
@@ -235,16 +246,7 @@ class App {
             // 3. Preload Thumbnails (Blocking)
             await this.preloadAllThumbnails();
 
-            // 4. Start App
-            setTimeout(() => {
-                if (this.ui.loadingScreen) this.ui.loadingScreen.classList.add('hidden');
-
-                // 5. Silent Background Preload of Full Images
-                this.preloadFullImages();
-
-            }, 500);
-
-            // 6. Init 3D View
+            // 4. Init 3D View
             this.view3d.init(
                 this.images,
                 (index, openViewer) => this.selectImage(index, openViewer),
@@ -254,13 +256,60 @@ class App {
                 () => { if (!this.isSlideshowActive) this.toggleMagnifier(); } // Auto-Magnify Callback
             );
 
-            // 7. Init 2D View
+            // 5. Init 2D View
             this.view2d.init(this.images, (index) => this.selectImage(index, true)); // Original selectImage
 
-            // 8. Apply initial state and URL params
+            // 6. Apply initial state and URL params
             this.switchMode(this.mode); // Reset to default first
             this.handleURLParams();
             this.typeTitle();
+
+            // 7. Start App - Smooth Transition
+            if (typeof gsap !== 'undefined') {
+                const tl = gsap.timeline({
+                    onComplete: () => {
+                        if (this.ui.loadingScreen) this.ui.loadingScreen.classList.add('hidden');
+                    }
+                });
+
+                // Fade out loading screen with a subtle zoom
+                if (this.ui.loadingScreen) {
+                    tl.to(this.ui.loadingScreen, {
+                        opacity: 0,
+                        scale: 1.05,
+                        duration: 0.6,
+                        ease: "power2.inOut",
+                        pointerEvents: "none"
+                    });
+                }
+
+                // Fade in Gallery & UI Elements (Staggered)
+                const gallery3d = document.getElementById('gallery-3d');
+                const gallery2d = document.getElementById('gallery-2d');
+                const thumbs = document.getElementById('thumbnail-selector');
+                const elementsToFade = [gallery3d, gallery2d, this.ui.title, this.ui.controlsContainer, thumbs].filter(Boolean);
+
+                if (elementsToFade.length > 0) {
+                    tl.fromTo(elementsToFade,
+                        { opacity: 0, y: 10 },
+                        { opacity: 1, y: 0, duration: 0.9, stagger: 0.06, ease: "power2.out" },
+                        "-=0.3"
+                    );
+                }
+            } else {
+                // Fallback
+                if (this.ui.loadingScreen) this.ui.loadingScreen.classList.add('hidden');
+                const gallery3d = document.getElementById('gallery-3d');
+                const gallery2d = document.getElementById('gallery-2d');
+                const thumbs = document.getElementById('thumbnail-selector');
+                const elements = [gallery3d, gallery2d, this.ui.title, this.ui.controlsContainer, thumbs].filter(Boolean);
+                elements.forEach(el => el.style.opacity = '1');
+            }
+
+            // 8. Silent Background Preload
+            this.preloadFullImages();
+
+            // (Previous Init calls moved up)
 
         } catch (error) {
             if (this.isDebug) console.warn("Metadata load failed, falling back to static list.", error);
@@ -398,7 +447,7 @@ class App {
 
                     if (loadedCount >= total) {
                         if (elFile) elFile.innerText = "Processing...";
-                        setTimeout(resolve, 300);
+                        resolve();
                     }
                 }
             };
@@ -444,7 +493,38 @@ class App {
 
     bindEvents() {
         if (this.ui.globalFullscreen) {
-            this.ui.globalFullscreen.onclick = () => this.toggleNativeFullscreen();
+            this.ui.globalFullscreen.addEventListener('click', () => this.toggleNativeFullscreen());
+        }
+
+        if (this.ui.refresh) {
+            this.ui.refresh.onclick = () => location.reload();
+        }
+
+        if (this.ui.controlsToggle && this.ui.controlsContainer) {
+            this.ui.controlsToggle.onclick = () => {
+                this.ui.controlsContainer.classList.toggle('expanded');
+                // Toggle Icon
+                const iconMenu = this.ui.controlsToggle.querySelector('.icon-menu');
+                const iconClose = this.ui.controlsToggle.querySelector('.icon-close');
+                if (iconMenu && iconClose) {
+                    iconMenu.classList.toggle('hidden');
+                    iconClose.classList.toggle('hidden');
+                }
+            };
+        }
+
+        // Viewer Controls Toggle
+        if (this.ui.viewerControlsToggle && this.ui.viewerControlsContainer) {
+            this.ui.viewerControlsToggle.onclick = () => {
+                this.ui.viewerControlsContainer.classList.toggle('expanded');
+                // Toggle Icon
+                const iconMenu = this.ui.viewerControlsToggle.querySelector('.icon-menu');
+                const iconClose = this.ui.viewerControlsToggle.querySelector('.icon-close');
+                if (iconMenu && iconClose) {
+                    iconMenu.classList.toggle('hidden');
+                    iconClose.classList.toggle('hidden');
+                }
+            };
         }
 
         // Monitor Fullscreen State Changes (Esc key, F11, etc.)
@@ -525,7 +605,9 @@ class App {
 
         // Viewer Controls
         this.ui.exitViewer.onclick = () => this.closeFullscreen();
-        this.ui.fullscreenToggle.onclick = () => this.toggleNativeFullscreen();
+        if (this.ui.fullscreenToggle) {
+            this.ui.fullscreenToggle.addEventListener('click', () => this.toggleNativeFullscreen());
+        }
         const zoomBtn = document.getElementById('zoomBtn');
         if (zoomBtn) {
             zoomBtn.onclick = (e) => {
@@ -670,7 +752,7 @@ class App {
         this.closeFullscreen();
 
         this.mode = newMode;
-        this.ui.toggle.innerText = newMode === '3D' ? '2D' : '3D';
+        if (this.ui.toggle) this.ui.toggle.innerText = newMode === '3D' ? '2D' : '3D';
 
         if (newMode === '3D') {
             this.view2d.hide();
@@ -788,7 +870,10 @@ class App {
 
 
         if (this.ui.viewerSlideshow) {
-            this.ui.viewerSlideshow.innerText = '⏸️';
+            const iconPlay = this.ui.viewerSlideshow.querySelector('.icon-play');
+            const iconPause = this.ui.viewerSlideshow.querySelector('.icon-pause');
+            if (iconPlay) iconPlay.classList.add('hidden');
+            if (iconPause) iconPause.classList.remove('hidden');
             this.ui.viewerSlideshow.title = "Stop Slideshow";
         }
 
@@ -834,7 +919,10 @@ class App {
         this.toggleControlsVisibility(true);
 
         if (this.ui.viewerSlideshow) {
-            this.ui.viewerSlideshow.innerText = '▶️';
+            const iconPlay = this.ui.viewerSlideshow.querySelector('.icon-play');
+            const iconPause = this.ui.viewerSlideshow.querySelector('.icon-pause');
+            if (iconPlay) iconPlay.classList.remove('hidden');
+            if (iconPause) iconPause.classList.add('hidden');
             this.ui.viewerSlideshow.title = "Start Slideshow";
         }
 
@@ -859,7 +947,7 @@ class App {
 
     toggleControlsVisibility(show) {
         const controls = [
-            this.ui.imageViewer.querySelector('#viewer-controls'),
+            this.ui.viewerControlsContainer,
             this.ui.leftArrow,
             this.ui.rightArrow,
             // Add top controls too if they are visible? Usually viewer covers them.
@@ -960,7 +1048,13 @@ class App {
     }
 
     toggleMetadata() {
-        this.ui.metadataViewer.classList.toggle('visible');
+        if (this.ui.metadataViewer.classList.contains('hidden')) {
+            this.ui.metadataViewer.classList.remove('hidden');
+            this.ui.metadataViewer.classList.add('visible');
+        } else {
+            this.ui.metadataViewer.classList.add('hidden');
+            this.ui.metadataViewer.classList.remove('visible');
+        }
     }
 
     activateImmersiveViewer(index) {
@@ -973,6 +1067,16 @@ class App {
         // Show Iframe Container
         iframe.classList.remove('hidden');
         iframe.style.display = 'block';
+
+        // Hide Viewer Controls (User Request 1/2)
+        // Hide Viewer Controls (User Request 1/2) - FORCE HIDE
+        if (this.ui.viewerControlsContainer) {
+            this.ui.viewerControlsContainer.style.display = 'none';
+        }
+        // Also hide Global Controls Container
+        if (this.ui.controlsContainer) {
+            this.ui.controlsContainer.style.display = 'none';
+        }
 
         // Construct URL
         const imgName = this.images[index];
@@ -1068,9 +1172,9 @@ class App {
             }
             this.view3d.enterLineView(index);
             // Hide Global Top Controls to prevent overlap
-            if (this.ui.topControls) {
-                this.ui.topControls.style.opacity = '0';
-                this.ui.topControls.style.pointerEvents = 'none';
+            if (this.ui.controlsContainer) {
+                this.ui.controlsContainer.style.opacity = '0';
+                this.ui.controlsContainer.style.pointerEvents = 'none';
             }
             if (this.ui.title) this.ui.title.style.opacity = '0';
 
@@ -1082,7 +1186,13 @@ class App {
 
             // Ensure Zoom button is "Magnify"
             const zoomBtn = document.getElementById('zoomBtn');
-            if (zoomBtn) { zoomBtn.innerText = '🔍'; zoomBtn.title = 'Magnify'; }
+            if (zoomBtn) {
+                const iconZoom = zoomBtn.querySelector('.icon-zoom');
+                const iconBack = zoomBtn.querySelector('.icon-back');
+                if (iconZoom) iconZoom.classList.remove('hidden');
+                if (iconBack) iconBack.classList.add('hidden');
+                zoomBtn.title = 'Magnify';
+            }
 
             // Metadata & Thumbs
             this.updateMetadata(index);
@@ -1129,14 +1239,17 @@ class App {
             // Zoom Button -> "Magnify"
             const zoomBtn = document.getElementById('zoomBtn');
             if (zoomBtn) {
-                zoomBtn.innerText = '🔍';
+                const iconZoom = zoomBtn.querySelector('.icon-zoom');
+                const iconBack = zoomBtn.querySelector('.icon-back');
+                if (iconZoom) iconZoom.classList.remove('hidden');
+                if (iconBack) iconBack.classList.add('hidden');
                 zoomBtn.title = 'Enter Immersive View';
             }
 
             // Hide Global UI Overlay (Title, Top Controls)
-            if (this.ui.topControls) {
-                this.ui.topControls.style.opacity = '0';
-                this.ui.topControls.style.pointerEvents = 'none';
+            if (this.ui.controlsContainer) {
+                this.ui.controlsContainer.style.opacity = '0';
+                this.ui.controlsContainer.style.pointerEvents = 'none';
             }
             if (this.ui.title) this.ui.title.style.opacity = '0';
 
@@ -1157,7 +1270,10 @@ class App {
         // --- 1. CLEANUP & UI RESET ---
         const zoomBtn = document.getElementById('zoomBtn');
         if (zoomBtn) {
-            zoomBtn.innerText = '🔍';
+            const iconZoom = zoomBtn.querySelector('.icon-zoom');
+            const iconBack = zoomBtn.querySelector('.icon-back');
+            if (iconZoom) iconZoom.classList.remove('hidden');
+            if (iconBack) iconBack.classList.add('hidden');
             zoomBtn.title = 'Use Scroll Wheel or Pinch to Zoom';
         }
 
@@ -1301,11 +1417,15 @@ class App {
 
             // Optional: Sync the Zoom Button UI immediately
             if (zoomBtn) {
+                const iconZoom = zoomBtn.querySelector('.icon-zoom');
+                const iconBack = zoomBtn.querySelector('.icon-back');
                 if (isNowZoomed) {
-                    zoomBtn.innerText = '🔙';
+                    if (iconZoom) iconZoom.classList.add('hidden');
+                    if (iconBack) iconBack.classList.remove('hidden');
                     zoomBtn.title = "Reset Zoom";
                 } else {
-                    zoomBtn.innerText = '🔍';
+                    if (iconZoom) iconZoom.classList.remove('hidden');
+                    if (iconBack) iconBack.classList.add('hidden');
                     zoomBtn.title = "Zoom / Magnify";
                 }
             }
@@ -1463,9 +1583,9 @@ class App {
                 this.ui.imageViewer.classList.remove('visible');
 
                 // Hide Global UI Overlay (Title, Top Controls)
-                if (this.ui.topControls) {
-                    this.ui.topControls.style.opacity = '0';
-                    this.ui.topControls.style.pointerEvents = 'none';
+                if (this.ui.controlsContainer) {
+                    this.ui.controlsContainer.style.opacity = '0';
+                    this.ui.controlsContainer.style.pointerEvents = 'none';
                 }
                 if (this.ui.title) this.ui.title.style.opacity = '0';
 
@@ -1496,8 +1616,22 @@ class App {
                 this.ui.imageViewer.classList.add('visible');
                 this.ui.imageViewer.classList.add('transparent');
 
+                // Restore Viewer Controls (User Request 1/2)
+                if (this.ui.viewerControlsContainer) {
+                    this.ui.viewerControlsContainer.style.display = 'flex';
+                }
+                // Restore Global Controls Container
+                if (this.ui.controlsContainer) {
+                    this.ui.controlsContainer.style.display = 'flex';
+                }
+
                 const zoomBtn = document.getElementById('zoomBtn');
-                if (zoomBtn) zoomBtn.innerText = '🔍';
+                if (zoomBtn) {
+                    const iconZoom = zoomBtn.querySelector('.icon-zoom');
+                    const iconBack = zoomBtn.querySelector('.icon-back');
+                    if (iconZoom) iconZoom.classList.remove('hidden');
+                    if (iconBack) iconBack.classList.add('hidden');
+                }
                 const thumbs = document.getElementById('thumbnail-selector');
                 if (thumbs) thumbs.classList.remove('hidden');
 
@@ -1522,9 +1656,9 @@ class App {
                 this.activateImmersiveViewer(this.currentIndex);
 
                 // Hide Global UI
-                if (this.ui.topControls) {
-                    this.ui.topControls.style.opacity = '0';
-                    this.ui.topControls.style.pointerEvents = 'none';
+                if (this.ui.controlsContainer) {
+                    this.ui.controlsContainer.style.opacity = '0';
+                    this.ui.controlsContainer.style.pointerEvents = 'none';
                 }
                 if (this.ui.title) this.ui.title.style.opacity = '0';
 
@@ -1554,10 +1688,22 @@ class App {
                 this.ui.imageViewer.classList.add('visible');
                 this.ui.imageViewer.classList.remove('transparent');
 
+                // Restore Viewer Controls (User Request 1/2)
+                if (this.ui.viewerControlsContainer) {
+                    this.ui.viewerControlsContainer.style.display = 'flex';
+                }
+                // Restore Global Controls Container
+                if (this.ui.controlsContainer) {
+                    this.ui.controlsContainer.style.display = 'flex';
+                }
+
                 // Restore Buttons
                 const btn = document.getElementById('zoomBtn');
                 if (btn) {
-                    btn.innerText = '🔍';
+                    const iconZoom = btn.querySelector('.icon-zoom');
+                    const iconBack = btn.querySelector('.icon-back');
+                    if (iconZoom) iconZoom.classList.remove('hidden');
+                    if (iconBack) iconBack.classList.add('hidden');
                     btn.title = "Enter Immersive View";
                 }
 
@@ -1633,10 +1779,10 @@ class App {
         }
 
         // 5. Restore Global UI
-        if (this.ui.topControls) {
-            this.ui.topControls.style.opacity = '1';
-            this.ui.topControls.style.pointerEvents = 'auto';
-            this.ui.topControls.style.visibility = 'visible';
+        if (this.ui.controlsContainer) {
+            this.ui.controlsContainer.style.opacity = '1';
+            this.ui.controlsContainer.style.pointerEvents = 'auto';
+            this.ui.controlsContainer.style.visibility = 'visible';
         }
         if (this.ui.title) this.ui.title.style.opacity = '0.9';
 
@@ -1705,25 +1851,46 @@ class App {
         const doc = window.document;
         const docEl = doc.documentElement;
 
-        // Standard
-        const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
-        const cancelFullScreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+        const isFS = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
 
-        if (!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
-            requestFullScreen.call(docEl);
+        if (!isFS) {
+            // Enter Fullscreen
+            const request = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+            if (request) {
+                const p = request.call(docEl);
+                if (p && p.catch) p.catch(err => console.error("Fullscreen error:", err));
+            }
         } else {
-            cancelFullScreen.call(doc);
+            // Exit Fullscreen
+            const exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+            if (exit) {
+                const p = exit.call(doc);
+                if (p && p.catch) p.catch(err => console.error("Exit Fullscreen error:", err));
+            }
         }
     }
 
     onFullscreenChange() {
-        const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+        const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+        this.log(`Fullscreen State: ${isFS}`);
 
-        // Update Toggle Icon
-        if (this.ui.globalFullscreen) {
-            this.ui.globalFullscreen.innerText = isFullscreen ? '🗗' : '⛶';
-            this.ui.globalFullscreen.title = isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen';
-        }
+        // Update All Fullscreen Buttons
+        const btns = [this.ui.globalFullscreen, this.ui.fullscreenToggle].filter(Boolean);
+        btns.forEach(btn => {
+            const iconExpand = btn.querySelector('.icon-expand');
+            const iconCompress = btn.querySelector('.icon-compress');
+            if (iconExpand && iconCompress) {
+                if (isFS) {
+                    iconExpand.classList.add('hidden');
+                    iconCompress.classList.remove('hidden');
+                    btn.title = 'Exit Fullscreen';
+                } else {
+                    iconExpand.classList.remove('hidden');
+                    iconCompress.classList.add('hidden');
+                    btn.title = 'Go Fullscreen';
+                }
+            }
+        });
 
         // Feature: Auto-close viewer on fullscreen exit (User Request)
         // If we just exited fullscreen, close the viewer experience to sync states.

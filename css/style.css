@@ -1,9 +1,19 @@
 /* Global & Reset */
+:root {
+    --vlm-pane-width: 0px;
+    --bp-xs: 374px;
+    --bp-sm: 600px;
+    --bp-md: 768px;
+    --bp-lg: 1024px;
+    --bp-xl: 1280px;
+}
+
 body {
     background-color: black;
     margin: 0;
     padding: 0;
     overflow: hidden;
+    overscroll-behavior-y: contain;
     /* App handles scrolling */
     font-family: 'Roboto', sans-serif;
     color: white;
@@ -50,11 +60,12 @@ button {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
+    right: var(--vlm-pane-width);
     height: 100%;
     pointer-events: none;
     /* Let clicks pass through to canvas/grid */
     z-index: 500;
+    transition: right 0.22s ease;
 }
 
 /* Previous definitions removed in favor of Unified Viewer Controls */
@@ -133,13 +144,14 @@ button {
     top: 20px;
     top: max(20px, env(safe-area-inset-top));
     right: 20px;
-    right: max(20px, env(safe-area-inset-right));
+    right: calc(max(20px, env(safe-area-inset-right)) + var(--vlm-pane-width));
     z-index: 210;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 10px;
     opacity: 0;
+    transition: right 0.22s ease;
 }
 
 #controls-toggle {
@@ -256,11 +268,12 @@ button {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
+    right: var(--vlm-pane-width);
     height: 100%;
     z-index: 1;
     opacity: 0;
     cursor: grab;
+    transition: right 0.22s ease;
 }
 
 #gallery-3d:active {
@@ -276,7 +289,7 @@ button {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
+    right: var(--vlm-pane-width);
     height: 100%;
     z-index: 5;
     display: grid;
@@ -289,7 +302,7 @@ button {
     overflow-x: hidden;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.5s ease-in-out;
+    transition: opacity 0.5s ease-in-out, right 0.22s ease;
     background: black;
 }
 
@@ -341,7 +354,7 @@ button {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
+    right: var(--vlm-pane-width);
     height: 100%;
     background: rgba(0, 0, 0, 0.95);
     z-index: 600;
@@ -352,7 +365,7 @@ button {
     /* Animation */
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), right 0.22s ease;
 }
 
 #imageViewer.visible {
@@ -442,13 +455,13 @@ button {
     position: fixed;
     bottom: 0;
     left: 0;
-    width: 100%;
+    right: var(--vlm-pane-width);
     background: linear-gradient(to top, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0));
     padding: 20px;
     padding-bottom: 40px;
     box-sizing: border-box;
     pointer-events: none;
-    transition: opacity 0.3s, transform 0.3s;
+    transition: opacity 0.3s, transform 0.3s, right 0.22s ease;
     z-index: 700;
     text-align: left;
     transform: translateY(100%);
@@ -588,18 +601,53 @@ button {
     }
 }
 
+/* FPS counter is OFF by default (was always-on holdover) — opt-in via
+   ?fps=1 / ?debug=1 query, which sets body.show-fps on the gallery app. */
+#fps-counter { display: none !important; }
+body.show-fps #fps-counter { display: block !important; }
+
+/* Reduced motion: kill expensive transitions/animations site-wide. */
+body.reduce-motion *,
+body.reduce-motion *::before,
+body.reduce-motion *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+}
+
+/* One-time swipe hint on mobile preview entry. JS adds .show-swipe-hint
+   to <body> on first preview state, removes after 4s or on first swipe. */
+body.show-swipe-hint::before,
+body.show-swipe-hint::after {
+    content: '';
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    z-index: 220;
+    pointer-events: none;
+    opacity: 0;
+    background: no-repeat center / contain;
+    animation: swipe-hint 1.6s ease-in-out 2;
+}
+body.show-swipe-hint::before {
+    left: 12px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5'><polyline points='15 18 9 12 15 6'/></svg>");
+}
+body.show-swipe-hint::after {
+    right: 12px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5'><polyline points='9 18 15 12 9 6'/></svg>");
+}
+@keyframes swipe-hint {
+    0%   { opacity: 0; transform: translateY(-50%) scale(0.7); }
+    35%  { opacity: 0.85; transform: translateY(-50%) scale(1); }
+    65%  { opacity: 0.85; transform: translateY(-50%) scale(1); }
+    100% { opacity: 0; transform: translateY(-50%) scale(1); }
+}
+
 /* Mobile Enhancements */
 @media (max-width: 768px) {
-
-    /* Force visible if users want to see performance */
-    #fps-counter {
-        display: block !important;
-        background: rgba(0, 0, 0, 0.5);
-        padding: 4px 8px;
-        border-radius: 4px;
-        top: max(10px, env(safe-area-inset-top));
-        left: 10px;
-    }
 
     /* Hide Nav Arrows on mobile (Swipe is primary) */
     .nav-arrow {
@@ -656,7 +704,7 @@ button {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
+    right: var(--vlm-pane-width);
     height: 100%;
     background: rgba(0, 0, 0, 0.8);
     z-index: 1000;
@@ -665,7 +713,7 @@ button {
     align-items: center;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.3s;
+    transition: opacity 0.3s, right 0.22s ease;
 }
 
 #lightPollutionMapOverlay.visible {
@@ -717,7 +765,8 @@ button {
 }
 
 #rightArrow {
-    right: 20px;
+    right: calc(20px + var(--vlm-pane-width));
+    transition: right 0.22s ease, opacity 0.2s;
 }
 
 /* Footer */
@@ -726,10 +775,11 @@ footer {
     position: fixed;
     bottom: 20px;
     left: 0;
-    width: 100%;
+    right: var(--vlm-pane-width);
     text-align: center;
     z-index: 15;
     pointer-events: none;
+    transition: right 0.22s ease;
 }
 
 footer h2 {
@@ -911,14 +961,14 @@ input[type="range"]::-webkit-slider-thumb:hover {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
+    right: var(--vlm-pane-width);
     height: 100%;
     border: none;
     z-index: 100;
     /* Above all */
     background: black;
     display: none;
-    /* transition: opacity 0.3s ease; (Optional) */
+    transition: right 0.22s ease;
 }
 
 #immersive-frame.hidden {
@@ -968,7 +1018,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
+    right: var(--vlm-pane-width);
     height: 100%;
     background: rgba(0, 0, 0, 0.8);
     z-index: 1000;

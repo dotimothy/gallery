@@ -30,13 +30,7 @@ export class View2D {
             const img = document.createElement('img');
             img.loading = 'lazy';
             img.decoding = 'async';
-            if (document.body.classList.contains('save-data')) {
-                img.src = `./thumbs/480/${imgName}.jpg`;
-            } else {
-                img.src = `./thumbs/800/${imgName}.jpg`;
-                img.srcset = `./thumbs/480/${imgName}.jpg 480w, ./thumbs/800/${imgName}.jpg 800w, ./thumbs/${imgName}.jpg 1200w`;
-                img.sizes = '(max-width: 600px) 50vw, (max-width: 1024px) 33vw, 25vw';
-            }
+            img.src = `./thumbs/${imgName}.jpg`;
             img.alt = `Photo ${index}`;
             img.onerror = (e) => {
                 console.error(`Failed to load thumb: ${img.src}`);

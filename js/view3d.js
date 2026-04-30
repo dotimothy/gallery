@@ -34,16 +34,6 @@ export class View3D {
         // Rendering Control
         this.isPaused = false;
         this.animationId = null;
-
-        // VLM eco-mode coexistence
-        this._ecoMode = false;
-        this._ecoTick = false;
-        this._defaultPixelRatio = Math.min(window.devicePixelRatio, 2);
-        this._wasRenderingBeforeHide = false;
-
-        // Respect prefers-reduced-motion (disables auto-rotate)
-        this.reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-        if (this.reduceMotion) this.autoRotate = false;
     }
 
     init(images, onSelect, onPreload, isMobile = false, isDebug = false, onMagnify = null) {
@@ -75,33 +65,6 @@ export class View3D {
             this.renderer.setPixelRatio(this.resolution || Math.min(window.devicePixelRatio, 2));
             this.container.innerHTML = ''; // Clear container
             this.container.appendChild(this.renderer.domElement);
-        }
-
-        // VLM eco-mode + page-visibility listeners (bound once per instance)
-        if (!this._ecoListenersBound) {
-            this._ecoListenersBound = true;
-            this._defaultPixelRatio = this.resolution || Math.min(window.devicePixelRatio, 2);
-
-            window.addEventListener('vlm:inference-start', () => {
-                this._ecoMode = true;
-                if (this.renderer) this.renderer.setPixelRatio(1.0);
-            });
-            window.addEventListener('vlm:inference-end', () => {
-                this._ecoMode = false;
-                if (this.renderer) this.renderer.setPixelRatio(this._defaultPixelRatio);
-            });
-
-            document.addEventListener('visibilitychange', () => {
-                if (document.hidden) {
-                    this._wasRenderingBeforeHide = !!this.animationId;
-                    if (this._wasRenderingBeforeHide && typeof this.pauseRendering === 'function') {
-                        this.pauseRendering();
-                    }
-                } else if (this._wasRenderingBeforeHide && typeof this.resumeRendering === 'function') {
-                    this.resumeRendering();
-                    this._wasRenderingBeforeHide = false;
-                }
-            });
         }
 
         // 2. SETUP SCENE
@@ -195,15 +158,9 @@ export class View3D {
             this.pivot.add(mesh);
             this.frames.push(mesh);
 
-            // Lazy Load Texture — use the 800w variant on mobile (or save-data)
-            // to halve VRAM and bandwidth without a visible quality hit at the
-            // sphere's typical thumbnail size.
+            // Lazy Load Texture
             const imgName = this.images[i];
-            const _saveData = (typeof document !== 'undefined') && document.body?.classList.contains('save-data');
-            const _texPath  = (this.isMobile || _saveData)
-                ? `./thumbs/800/${imgName}.jpg`
-                : `./thumbs/${imgName}.jpg`;
-            new THREE.TextureLoader().load(_texPath, (tex) => {
+            new THREE.TextureLoader().load(`./thumbs/${imgName}.jpg`, (tex) => {
                 tex.encoding = THREE.sRGBEncoding;
                 tex.minFilter = THREE.LinearFilter;
 
@@ -261,11 +218,8 @@ export class View3D {
     }
 
     getOptimalDistance() {
-        // Use the container's actual layout box so the calculation stays
-        // correct when the VLM panel pushes content via --vlm-pane-width.
-        const rect = this.container?.getBoundingClientRect();
-        const width = (rect?.width)  || window.innerWidth;
-        const height = (rect?.height) || window.innerHeight;
+        const width = window.innerWidth;
+        const height = window.innerHeight;
         const aspect = width / height;
 
         // Scientific base: To fit a sphere vertically in 60deg FOV:
@@ -482,15 +436,8 @@ export class View3D {
             }
         });
 
-        // Resize: listen on window AND on the container's layout box.
-        // The ResizeObserver picks up CSS-driven layout changes (e.g. when
-        // the VLM panel pushes content via --vlm-pane-width) without needing
-        // a synthetic window resize event.
+        // Resize
         window.addEventListener('resize', () => this.resize());
-        if (typeof ResizeObserver !== 'undefined') {
-            this._containerObserver = new ResizeObserver(() => this.resize());
-            this._containerObserver.observe(this.container);
-        }
     }
 
 
@@ -622,15 +569,6 @@ export class View3D {
     animate() {
         if (this.isPaused) return;
 
-        // Eco mode (during VLM inference): skip every other frame for ~30 fps
-        if (this._ecoMode) {
-            this._ecoTick = !this._ecoTick;
-            if (!this._ecoTick) {
-                this.animationId = requestAnimationFrame(() => this.animate());
-                return;
-            }
-        }
-
         // Time
         const dt = this.clock.getDelta();
         const time = this.clock.elapsedTime;
@@ -659,8 +597,8 @@ export class View3D {
             this.pivot.rotation.y = this.currentRotation.y;
         }
 
-        // Auto Rotate (respect prefers-reduced-motion)
-        if (!this.isDragging && !this.isTransitioning && !this.reduceMotion) {
+        // Auto Rotate
+        if (!this.isDragging && !this.isTransitioning) {
             // Speed should be "per second" now if using dt, but targetRotation is position accumulator
             // Original: += 0.0005 per frame. At 60fps -> 0.03 per second.
             this.targetRotation.y += 0.03 * dt;
@@ -695,16 +633,11 @@ export class View3D {
 
     resize() {
         if (!this.camera || !this.renderer) return;
-        // Read from the container's actual layout box (driven by CSS via
-        // --vlm-pane-width when the VLM panel is open) rather than viewport.
-        const rect = this.container.getBoundingClientRect();
-        const width  = Math.max(1, Math.round(rect.width  || window.innerWidth));
-        const height = Math.max(1, Math.round(rect.height || window.innerHeight));
+        const width = window.innerWidth;
+        const height = window.innerHeight;
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
-        // setSize(_, _, false) — keep CSS in charge of canvas element size,
-        // we only update the drawing buffer to match the layout box.
-        this.renderer.setSize(width, height, false);
+        this.renderer.setSize(width, height);
 
         // Mobile Fit Logic (Aggressive)
         // Recalculate based on current dynamic radius

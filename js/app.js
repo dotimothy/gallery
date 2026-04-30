@@ -13,21 +13,8 @@ class App {
         this.metadata = {};
         this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1);
 
-        // Adaptive perf flags — read once, persist for session
-        this.reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-        const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-        this.saveData = !!conn?.saveData ||
-                        conn?.effectiveType === 'slow-2g' ||
-                        conn?.effectiveType === '2g';
-        this.lowMem  = (navigator.deviceMemory ?? 8) < 4;
-        if (this.saveData) document.body.classList.add('save-data');
-        if (this.reduceMotion) document.body.classList.add('reduce-motion');
-        if (this.lowMem) document.body.classList.add('low-mem');
-
-        // Debug Flag — also gates the FPS counter
-        const params = new URLSearchParams(window.location.search);
-        this.isDebug = params.has('debug');
-        if (this.isDebug || params.has('fps')) document.body.classList.add('show-fps');
+        // Debug Flag
+        this.isDebug = new URLSearchParams(window.location.search).has('debug');
 
         // Touch State
         this.touchStartX = 0;
@@ -746,7 +733,7 @@ class App {
     }
 
     handleSwipe() {
-        // 1. ONLY navigate if the viewer is open.
+        // 1. ONLY navigate if the viewer is open. 
         // If hidden, we are probably rotating the 3D sphere or browsing the 2D grid.
         if (this.ui.imageViewer.hidden) return;
 
@@ -755,29 +742,9 @@ class App {
         if (this.ui.fullImageContainer.isZoomed && this.ui.fullImageContainer.isZoomed()) return;
 
         if (Math.abs(this.touchStartX - this.touchEndX) > this.swipeThresh) {
-            if (this.touchEndX < this.touchStartX) { this._haptic(8); this.next(); }
-            if (this.touchEndX > this.touchStartX) { this._haptic(8); this.prev(); }
-            // First successful swipe — clear the one-time discoverability hint.
-            try {
-                document.body.classList.remove('show-swipe-hint');
-                localStorage.setItem('swipeHintSeen', '1');
-            } catch (_) {}
+            if (this.touchEndX < this.touchStartX) this.next();
+            if (this.touchEndX > this.touchStartX) this.prev();
         }
-    }
-
-    _haptic(ms = 10) {
-        if (this.reduceMotion) return;
-        if (navigator.vibrate) try { navigator.vibrate(ms); } catch (_) {}
-    }
-
-    _maybeShowSwipeHint() {
-        if (!this.isMobile) return;
-        try { if (localStorage.getItem('swipeHintSeen')) return; } catch (_) {}
-        document.body.classList.add('show-swipe-hint');
-        setTimeout(() => {
-            document.body.classList.remove('show-swipe-hint');
-            try { localStorage.setItem('swipeHintSeen', '1'); } catch (_) {}
-        }, 4000);
     }
 
     switchMode(newMode) {
@@ -1157,7 +1124,6 @@ class App {
             this.viewerCloseTimer = null;
         }
 
-        this._maybeShowSwipeHint();
         this.log(`Opening Viewer Idx:${index} Mode:${this.mode}`);
 
         // Auto-Fullscreen Trigger (User Gesture)

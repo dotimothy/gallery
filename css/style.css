@@ -1,4 +1,11 @@
 /* Global & Reset */
+
+:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.7);
+    outline-offset: 3px;
+    border-radius: 3px;
+}
+
 body {
     background-color: black;
     margin: 0;
@@ -140,6 +147,7 @@ button {
     align-items: flex-end;
     gap: 10px;
     opacity: 0;
+    transition: opacity 0.4s ease, visibility 0.4s ease;
 }
 
 #controls-toggle {
@@ -304,7 +312,6 @@ button {
 .thumb {
     position: relative;
     width: 100%;
-    aspect-ratio: 1;
     overflow: hidden;
     border-radius: 8px;
     cursor: pointer;
@@ -323,6 +330,12 @@ button {
     height: 100%;
     object-fit: cover;
     display: block;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.thumb.loaded img {
+    opacity: 1;
 }
 
 .thumb:hover {
@@ -409,6 +422,64 @@ button {
     cursor: grabbing;
     transition: none;
     /* No interaction lag during drag */
+}
+
+/* Viewer counter, EXIF strip, keyboard hint */
+#image-counter {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.75rem;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
+    letter-spacing: 0.12em;
+    pointer-events: none;
+    user-select: none;
+    z-index: 10;
+    white-space: nowrap;
+}
+
+#viewer-exif-strip {
+    position: absolute;
+    bottom: 48px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    pointer-events: none;
+    user-select: none;
+    z-index: 10;
+    white-space: nowrap;
+}
+
+#viewer-exif-strip span {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.7rem;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
+    letter-spacing: 0.08em;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+#viewer-hint {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.65rem;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
+    letter-spacing: 0.1em;
+    pointer-events: none;
+    user-select: none;
+    z-index: 10;
+    white-space: nowrap;
+    transition: opacity 1s ease;
 }
 
 /* Loader */

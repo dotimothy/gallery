@@ -30,7 +30,7 @@ export class SettingsManager {
     }
 
     load() {
-        const stored = sessionStorage.getItem('gallerySettings');
+        const stored = localStorage.getItem('gallerySettings');
         if (stored) {
             try {
                 const parsed = JSON.parse(stored);
@@ -43,7 +43,7 @@ export class SettingsManager {
     }
 
     save() {
-        sessionStorage.setItem('gallerySettings', JSON.stringify(this.settings));
+        localStorage.setItem('gallerySettings', JSON.stringify(this.settings));
         if (this.isDebug) console.log("[Settings] Saved:", this.settings);
     }
 

@@ -5,13 +5,12 @@ export class View2D {
         this.onSelect = null;
     }
 
-    init(images, onSelect, isDebug = false) {
+    init(images, onSelect, metadata = {}, isDebug = false) {
         this.isDebug = isDebug;
         if (this.isDebug) console.log(`[View2D] Init: ${images.length} images`);
         this.images = images;
         this.onSelect = onSelect;
-        // set default or initial from somewhere? App will call updateSettings on load potentially.
-        // But let's support it if we want. For now, App handles the initial sync.
+        this.metadata = metadata;
         this.render();
     }
 
@@ -26,21 +25,50 @@ export class View2D {
         this.images.forEach((imgName, index) => {
             const thumb = document.createElement('div');
             thumb.className = 'thumb';
+            thumb.tabIndex = 0;
+            thumb.setAttribute('role', 'button');
+
+            const meta = this.metadata[imgName];
+            const w = meta && meta['Image Width'];
+            const h = meta && meta['Image Height'];
+            if (w && h) thumb.style.aspectRatio = `${w} / ${h}`;
+
+            if (meta && meta.lqip) {
+                thumb.style.backgroundImage = `url(${meta.lqip})`;
+                thumb.style.backgroundSize = 'cover';
+                thumb.style.backgroundPosition = 'center';
+            }
 
             const img = document.createElement('img');
             img.loading = 'lazy';
             img.decoding = 'async';
             img.src = `./thumbs/${imgName}.jpg`;
-            img.alt = `Photo ${index}`;
-            img.onerror = (e) => {
+            const altParts = [meta && meta['Image Model'], meta && meta['EXIF FocalLength'], meta && meta['EXIF DateTimeOriginal']].filter(Boolean);
+            img.alt = altParts.length ? altParts.join(' — ') : `Photo ${index + 1}`;
+
+            const revealThumb = () => {
+                thumb.classList.add('loaded');
+            };
+            img.addEventListener('load', revealThumb);
+            // Handle images already in browser cache (load event won't fire)
+            if (img.complete && img.naturalWidth > 0) revealThumb();
+
+            img.onerror = () => {
                 console.error(`Failed to load thumb: ${img.src}`);
-                thumb.style.backgroundColor = 'red'; // Visual debug
+                thumb.style.backgroundImage = '';
+                thumb.classList.add('loaded');
             };
 
             thumb.appendChild(img);
 
             thumb.onclick = () => {
                 if (this.onSelect) this.onSelect(index, true);
+            };
+            thumb.onkeydown = (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    if (this.onSelect) this.onSelect(index, true);
+                }
             };
 
             this.container.appendChild(thumb);

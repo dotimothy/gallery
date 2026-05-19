@@ -1,4 +1,6 @@
 import os
+import io
+import base64
 import numpy as np
 import cv2 as cv
 import json
@@ -6,7 +8,7 @@ from tqdm import tqdm
 import exifread
 import shutil
 from datetime import datetime
-from PIL import Image
+from PIL import Image, ImageOps
 from PIL.ExifTags import TAGS
 import time
 from multiprocessing import Pool, cpu_count
@@ -46,17 +48,20 @@ def process_thumbnail(args):
     name, quality, size = args
     thumbPath = f'./{thumbDir}/{name}.jpg'
     fullPath = f'{fullDir}/{name}.jpg'
-    
+
     if os.path.exists(thumbPath):
         return # Skip if exists (or we could add a force flag)
 
-    img = cv.imread(fullPath)
-    if img is not None:
-        resized = cv.resize(img, size)
-        q = int(max(1, min(quality, 100)))
-        cv.imwrite(thumbPath, resized, [cv.IMWRITE_JPEG_QUALITY, q, cv.IMWRITE_JPEG_PROGRESSIVE, 1])
-    else:
-        print(f"Warning: Could not read image {fullPath}. Skipping thumbnail generation.")
+    try:
+        from PIL import ImageOps
+        with Image.open(fullPath) as img_pil:
+            img_pil = ImageOps.exif_transpose(img_pil)  # Apply EXIF rotation
+            if img_pil.mode != 'RGB':
+                img_pil = img_pil.convert('RGB')
+            img_pil.thumbnail(size, Image.LANCZOS)  # Preserves aspect ratio
+            img_pil.save(thumbPath, 'JPEG', quality=int(max(1, min(quality, 100))), optimize=True, progressive=True)
+    except Exception as e:
+        print(f"Warning: Could not process {fullPath}: {e}")
 
 def getThumbs(quality=85, check=False, size=(1200, 900)):
     # Prepare arguments for multiprocessing
@@ -106,6 +111,19 @@ def process_metadata(name):
             metadata['GPS GPSLongitudeRef'] = str(tags['GPS GPSLongitudeRef'])
 
         metadata['File Size'] = getFileSize(fullPath)
+
+        # Generate LQIP from thumbnail (thumbnails are generated before metadata)
+        thumbPath = f'{thumbDir}/{name}.jpg'
+        try:
+            with Image.open(thumbPath) as thumb_img:
+                lqip = thumb_img.copy()
+                lqip.thumbnail((20, 20), Image.LANCZOS)
+                buf = io.BytesIO()
+                lqip.save(buf, format='JPEG', quality=20, optimize=True)
+                metadata['lqip'] = 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode()
+        except Exception:
+            pass  # LQIP is optional — graceful degradation
+
         return (name, metadata)
 
     except Exception as e:

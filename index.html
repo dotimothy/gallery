@@ -24,7 +24,7 @@
         <!-- Loading Screen -->
         <div id="loading-screen">
             <div class="spinner"></div>
-            <div id="loading-text">Loading Gallery... 0%</div>
+            <div id="loading-text" aria-live="polite" aria-atomic="true">Loading Gallery... 0%</div>
             <div id="loading-bar-container">
                 <div id="loading-bar"></div>
             </div>
@@ -46,7 +46,7 @@
         <!-- Toggle Switch -->
         <!-- Toggle Switch & Controls -->
         <div id="controls-container">
-            <button id="controls-toggle" title="Menu" aria-label="Toggle Menu">
+            <button id="controls-toggle" title="Menu" aria-label="Toggle Menu" aria-expanded="false">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-menu">
                     <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                         stroke-linejoin="round" />
@@ -58,20 +58,20 @@
             </button>
 
             <div id="controls-list">
-                <button id="refresh" title="Reload Gallery">
+                <button id="refresh" title="Reload Gallery" aria-label="Reload gallery">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M23 4v6h-6M1 20v-6h6" />
                         <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
                     </svg>
                 </button>
-                <button id="toggleSettings" title="Settings">
+                <button id="toggleSettings" title="Settings" aria-label="Open settings">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path
                             d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
                         <circle cx="12" cy="12" r="3" />
                     </svg>
                 </button>
-                <button id="global-fullscreen" title="Go Fullscreen">
+                <button id="global-fullscreen" title="Go Fullscreen" aria-label="Toggle fullscreen">
                     <svg class="icon-expand" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2">
                         <path
@@ -83,7 +83,7 @@
                             d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
                     </svg>
                 </button>
-                <button id="mode-toggle" class="text-btn">3D</button>
+                <button id="mode-toggle" class="text-btn" aria-label="Switch to 2D layout">3D</button>
             </div>
         </div>
 
@@ -92,7 +92,7 @@
             <div class="settings-content">
                 <div class="settings-header">
                     <h2>Gallery Settings</h2>
-                    <button id="closeSettings">✖️</button>
+                    <button id="closeSettings" aria-label="Close settings">✖️</button>
                 </div>
 
                 <div class="setting-group" id="group-3d">
@@ -156,8 +156,8 @@
     </div>
 
     <!-- Navigation Hints / Arrows (Moved to root to ensure correct Z-Index stacking over viewer) -->
-    <button id="leftArrow" class="nav-arrow">❮</button>
-    <button id="rightArrow" class="nav-arrow">❯</button>
+    <button id="leftArrow" class="nav-arrow" aria-label="Previous image">❮</button>
+    <button id="rightArrow" class="nav-arrow" aria-label="Next image">❯</button>
 
     <!-- 3D View Container -->
     <div id="gallery-3d"></div>
@@ -166,11 +166,11 @@
     <div id="gallery-2d"></div>
 
     <!-- 2D Fullscreen Viewer Overlay (classic behavior) -->
-    <div id="imageViewer" hidden>
+    <div id="imageViewer" hidden role="dialog" aria-modal="true" aria-label="Image viewer" aria-describedby="image-counter" tabindex="-1">
         <!-- Controls Container -->
         <!-- Controls Container -->
         <div id="viewer-controls-container">
-            <button id="viewer-controls-toggle" title="Viewer Menu" aria-label="Toggle Viewer Menu">
+            <button id="viewer-controls-toggle" title="Viewer Menu" aria-label="Toggle Viewer Menu" aria-expanded="false">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-menu">
                     <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                         stroke-linejoin="round" />
@@ -181,18 +181,18 @@
                 </svg>
             </button>
             <div id="viewer-controls-list">
-                <button id="exitViewer" title="Close Viewer">
+                <button id="exitViewer" title="Close Viewer" aria-label="Close viewer">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 6L6 18M6 6L18 18" />
                     </svg>
                 </button>
-                <button id="fullscreenToggle" title="Fullscreen">
+                <button id="fullscreenToggle" title="Fullscreen" aria-label="Toggle fullscreen">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path
                             d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
                     </svg>
                 </button>
-                <button id="zoomBtn" title="Zoom / Magnify">
+                <button id="zoomBtn" title="Zoom / Magnify" aria-label="Zoom / Magnify">
                     <svg class="icon-zoom" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2">
                         <circle cx="11" cy="11" r="8"></circle>
@@ -205,14 +205,14 @@
                         <path d="M19 12H5M12 19l-7-7 7-7" />
                     </svg>
                 </button>
-                <button id="toggleMetadata" title="Info">
+                <button id="toggleMetadata" title="Info" aria-label="Toggle image info">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"></circle>
                         <line x1="12" y1="16" x2="12" y2="12"></line>
                         <circle cx="12" cy="8" r="2" fill="currentColor" stroke="none"></circle>
                     </svg>
                 </button>
-                <button id="viewer-slideshow" title="Toggle Slideshow">
+                <button id="viewer-slideshow" title="Toggle Slideshow" aria-label="Toggle slideshow">
                     <svg class="icon-play" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2">
                         <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -223,7 +223,7 @@
                         <rect x="14" y="4" width="4" height="16"></rect>
                     </svg>
                 </button>
-                <button id="toggleThumbs" title="Toggle Palette">
+                <button id="toggleThumbs" title="Toggle Palette" aria-label="Toggle thumbnail strip">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7"></rect>
                         <rect x="14" y="3" width="7" height="7"></rect>
@@ -236,6 +236,10 @@
 
         <div id="full-image-container"></div>
         <div id="thumbnail-selector" class="visible"></div>
+
+        <div id="image-counter" aria-live="polite" aria-atomic="true"></div>
+        <div id="viewer-exif-strip" aria-hidden="true"></div>
+        <div id="viewer-hint" aria-hidden="true">&#8592; &#8594; navigate &nbsp;&middot;&nbsp; Esc close &nbsp;&middot;&nbsp; i info</div>
     </div>
 
     <!-- Metadata Overlay (Moved to root for correct Z-index) -->
@@ -248,7 +252,7 @@
     <div id="lightPollutionMapOverlay">
         <div id="lightPollutionMapContainer">
             <iframe id="lightPollutionMapIframe" frameborder="0" scrolling="no"></iframe>
-            <button id="lightPollutionMapCloseButton">✖️</button>
+            <button id="lightPollutionMapCloseButton" aria-label="Close light pollution map">✖️</button>
         </div>
     </div>
 
@@ -257,7 +261,7 @@
         <div id="licenseContainer">
             <div class="license-header">
                 <h2>License</h2>
-                <button id="closeLicense">✖️</button>
+                <button id="closeLicense" aria-label="Close license">✖️</button>
             </div>
             <iframe id="licenseIframe" src="about:blank"></iframe>
         </div>

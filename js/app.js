@@ -55,6 +55,9 @@ class App {
             loadingScreen: document.getElementById('loading-screen'),
             immersiveFrame: document.getElementById('immersive-frame'), // Added
             refresh: document.getElementById('refresh'),
+            imageCounter: document.getElementById('image-counter'),
+            viewerExifStrip: document.getElementById('viewer-exif-strip'),
+            viewerHint: document.getElementById('viewer-hint'),
         };
 
         // Initialize Views
@@ -89,6 +92,20 @@ class App {
             // Standard Preview Initialization
             this.ui.imageViewer.hidden = false;
             this.ui.imageViewer.classList.add('visible');
+
+            // Show keyboard hint, then fade out after 4 seconds
+            if (this.ui.viewerHint) {
+                this.ui.viewerHint.style.opacity = '1';
+                clearTimeout(this._hintTimer);
+                this._hintTimer = setTimeout(() => {
+                    if (this.ui.viewerHint) this.ui.viewerHint.style.opacity = '0';
+                }, 4000);
+            }
+
+            // Move keyboard focus into the dialog
+            setTimeout(() => {
+                if (this.ui.imageViewer) this.ui.imageViewer.focus();
+            }, 50);
 
             // 3D Rendering Management:
             // In 3D mode, PREVIEW is interactive Line View, so we MUST keep it rendering.
@@ -166,6 +183,12 @@ class App {
             this.log('Entering EXPLORE state');
             this.ui.imageViewer.classList.remove('visible');
             this.ui.imageViewer.classList.remove('transparent');
+
+            // Restore focus to last-active thumbnail when closing viewer
+            setTimeout(() => {
+                const thumbs = document.getElementsByClassName('thumb');
+                if (thumbs[this.currentIndex]) thumbs[this.currentIndex].focus();
+            }, 320); // After the 300ms visibility transition
 
             setTimeout(() => {
                 this.ui.imageViewer.hidden = true;
@@ -257,7 +280,7 @@ class App {
             );
 
             // 5. Init 2D View
-            this.view2d.init(this.images, (index) => this.selectImage(index, true)); // Original selectImage
+            this.view2d.init(this.images, (index) => this.selectImage(index, true), this.metadata); // Original selectImage
 
             // 6. Apply initial state and URL params
             this.switchMode(this.mode); // Reset to default first
@@ -324,7 +347,7 @@ class App {
                 this.isDebug,
                 () => { if (!this.isSlideshowActive) this.toggleMagnifier(); }
             );
-            this.view2d.init(this.images, (index) => this.selectImage(index, true), this.isDebug);
+            this.view2d.init(this.images, (index) => this.selectImage(index, true), {}, this.isDebug);
 
             this.switchMode(this.mode); // Initial State
             this.handleURLParams();
@@ -502,8 +525,8 @@ class App {
 
         if (this.ui.controlsToggle && this.ui.controlsContainer) {
             this.ui.controlsToggle.onclick = () => {
-                this.ui.controlsContainer.classList.toggle('expanded');
-                // Toggle Icon
+                const isExpanded = this.ui.controlsContainer.classList.toggle('expanded');
+                this.ui.controlsToggle.setAttribute('aria-expanded', String(isExpanded));
                 const iconMenu = this.ui.controlsToggle.querySelector('.icon-menu');
                 const iconClose = this.ui.controlsToggle.querySelector('.icon-close');
                 if (iconMenu && iconClose) {
@@ -516,8 +539,8 @@ class App {
         // Viewer Controls Toggle
         if (this.ui.viewerControlsToggle && this.ui.viewerControlsContainer) {
             this.ui.viewerControlsToggle.onclick = () => {
-                this.ui.viewerControlsContainer.classList.toggle('expanded');
-                // Toggle Icon
+                const isExpanded = this.ui.viewerControlsContainer.classList.toggle('expanded');
+                this.ui.viewerControlsToggle.setAttribute('aria-expanded', String(isExpanded));
                 const iconMenu = this.ui.viewerControlsToggle.querySelector('.icon-menu');
                 const iconClose = this.ui.viewerControlsToggle.querySelector('.icon-close');
                 if (iconMenu && iconClose) {
@@ -707,6 +730,11 @@ class App {
         // Listen for messages from Independent Viewers (Immersive & License)
         window.addEventListener('message', (e) => {
             if (e.data.action === 'close') {
+                // Close requests from the immersive iframe should fully exit
+                // to gallery, not drop back to the PREVIEW line view.
+                if (this.viewState.getState() === 'detail') {
+                    this.viewState.transition('preview');
+                }
                 this.closeFullscreen();
             } else if (e.data.action === 'closeLicense') {
                 this.hideLicense();
@@ -752,7 +780,10 @@ class App {
         this.closeFullscreen();
 
         this.mode = newMode;
-        if (this.ui.toggle) this.ui.toggle.innerText = newMode === '3D' ? '2D' : '3D';
+        if (this.ui.toggle) {
+            this.ui.toggle.innerText = newMode === '3D' ? '2D' : '3D';
+            this.ui.toggle.setAttribute('aria-label', newMode === '3D' ? 'Switch to 2D layout' : 'Switch to 3D view');
+        }
 
         if (newMode === '3D') {
             this.view2d.hide();
@@ -788,6 +819,24 @@ class App {
         // Sync Views
         if (this.mode === '3D') this.view3d.goToIndex(index);
         else this.view2d.goToIndex(index);
+
+        // Update image counter
+        if (this.ui.imageCounter) {
+            this.ui.imageCounter.textContent = `${index + 1} / ${this.images.length}`;
+        }
+
+        // Update inline EXIF strip
+        if (this.ui.viewerExifStrip) {
+            const imgName = this.images[index];
+            const m = this.metadata[imgName];
+            const fields = [
+                m && m['Image Model'],
+                m && m['EXIF FocalLength'] && `${m['EXIF FocalLength']}mm`,
+                m && m['EXIF FNumber'] && `f/${m['EXIF FNumber']}`,
+                m && m['EXIF ISOSpeedRatings'] && `ISO ${m['EXIF ISOSpeedRatings']}`,
+            ].filter(Boolean);
+            this.ui.viewerExifStrip.innerHTML = fields.map(f => `<span>${f}</span>`).join('');
+        }
 
         // Update Metadata
         this.updateMetadata(index);
@@ -1742,8 +1791,20 @@ class App {
         // 2. Hide Legacy Viewer (2DOverlay)
         if (this.ui.imageViewer) {
             this.ui.imageViewer.classList.remove('visible');
+            this.ui.imageViewer.classList.remove('transparent');
             this.ui.imageViewer.hidden = true;
             this.ui.imageViewer.style.cursor = 'auto'; // Reset cursor
+        }
+
+        // Collapse viewer controls menu so it doesn't sit invisibly over outer buttons
+        if (this.ui.viewerControlsContainer) {
+            this.ui.viewerControlsContainer.classList.remove('expanded');
+            if (this.ui.viewerControlsToggle) {
+                const iconMenu = this.ui.viewerControlsToggle.querySelector('.icon-menu');
+                const iconClose = this.ui.viewerControlsToggle.querySelector('.icon-close');
+                if (iconMenu) iconMenu.classList.remove('hidden');
+                if (iconClose) iconClose.classList.add('hidden');
+            }
         }
 
         if (this.ui.fullImageContainer) {
@@ -1780,6 +1841,9 @@ class App {
 
         // 5. Restore Global UI
         if (this.ui.controlsContainer) {
+            // activateImmersiveViewer sets display:none inline; clear it so
+            // the controls participate in layout again and can fade in.
+            this.ui.controlsContainer.style.display = '';
             this.ui.controlsContainer.style.opacity = '1';
             this.ui.controlsContainer.style.pointerEvents = 'auto';
             this.ui.controlsContainer.style.visibility = 'visible';

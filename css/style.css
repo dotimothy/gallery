@@ -792,7 +792,6 @@ button {
 }
 
 /* Footer */
-/* Footer */
 footer {
     position: fixed;
     bottom: 20px;
@@ -801,6 +800,15 @@ footer {
     text-align: center;
     z-index: 15;
     pointer-events: none;
+    transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+footer.hidden,
+body:has(#imageViewer.visible) footer,
+body:has(#immersive-frame:not(.hidden)) footer {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }
 
 footer h2 {

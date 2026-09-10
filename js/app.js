@@ -58,6 +58,7 @@ class App {
             imageCounter: document.getElementById('image-counter'),
             viewerExifStrip: document.getElementById('viewer-exif-strip'),
             viewerHint: document.getElementById('viewer-hint'),
+            footer: document.getElementById('gallery-footer') || document.querySelector('footer'),
         };
 
         // Initialize Views
@@ -84,10 +85,23 @@ class App {
         }
     }
 
+    hideFooter() {
+        if (this.ui.footer) {
+            this.ui.footer.classList.add('hidden');
+        }
+    }
+
+    showFooter() {
+        if (this.ui.footer) {
+            this.ui.footer.classList.remove('hidden');
+        }
+    }
+
     setupStateHooks() {
         // EXPLORE/DETAIL -> PREVIEW: Single image fit-to-screen (viewer)
         this.viewState.registerHook('preview', 'onEnter', (fromState) => {
             this.log(`Entering PREVIEW state from ${fromState}`);
+            this.hideFooter();
 
             // Standard Preview Initialization
             this.ui.imageViewer.hidden = false;
@@ -150,6 +164,7 @@ class App {
         // PREVIEW -> DETAIL: Enter magnifier
         this.viewState.registerHook('detail', 'onEnter', (fromState) => {
             this.log('Entering DETAIL state');
+            this.hideFooter();
             this.ui.imageViewer.classList.remove('transparent');
             this.ui.fullImageContainer.style.display = 'flex';
 
@@ -181,6 +196,7 @@ class App {
         // PREVIEW -> EXPLORE: Close viewer
         this.viewState.registerHook('explore', 'onEnter', (fromState) => {
             this.log('Entering EXPLORE state');
+            this.showFooter();
             this.ui.imageViewer.classList.remove('visible');
             this.ui.imageViewer.classList.remove('transparent');
 
@@ -1126,6 +1142,7 @@ class App {
         if (this.ui.controlsContainer) {
             this.ui.controlsContainer.style.display = 'none';
         }
+        this.hideFooter();
 
         // Construct URL
         const imgName = this.images[index];
@@ -1226,6 +1243,7 @@ class App {
                 this.ui.controlsContainer.style.pointerEvents = 'none';
             }
             if (this.ui.title) this.ui.title.style.opacity = '0';
+            this.hideFooter();
 
             // Show DOM Controls (Arrows, Zoom Btn) BUT CLEAR IMAGE
             this.ui.fullImageContainer.innerHTML = '';
@@ -1301,6 +1319,7 @@ class App {
                 this.ui.controlsContainer.style.pointerEvents = 'none';
             }
             if (this.ui.title) this.ui.title.style.opacity = '0';
+            this.hideFooter();
 
             // Hide 2D Grid
             const g2d = document.getElementById('gallery-2d');
@@ -1849,6 +1868,7 @@ class App {
             this.ui.controlsContainer.style.visibility = 'visible';
         }
         if (this.ui.title) this.ui.title.style.opacity = '0.9';
+        this.showFooter();
 
         this.log("Fullscreen Closed. Returned to Explore.");
     }

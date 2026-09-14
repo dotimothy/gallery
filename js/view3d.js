@@ -1,3 +1,4 @@
+import { resolveShape, shapePositions } from './shapes.js';
 
 // Three.js is loaded globally via CDN
 const THREE = window.THREE;
@@ -14,6 +15,9 @@ export class View3D {
 
         // Config
         this.radius = 25;
+        this.shapeEmoji = resolveShape(document.querySelector('meta[name="gallery-shape-emoji"]')?.content);
+        this.useShape = Boolean(this.shapeEmoji);
+        this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         this.isDragging = false;
         this.previousMouse = { x: 0, y: 0 };
         this.targetRotation = { x: 0, y: 0 };
@@ -86,6 +90,23 @@ export class View3D {
         this.scene.add(this.pivot);
         this.createFrames();
         this.createParticles();
+        if (this.shapeEmoji && !this.shapeButton) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.style.cssText = 'position:absolute;bottom:85px;left:16px;z-index:100;padding:12px 16px;min-height:44px;background:#161616;color:white;border:1px solid #888;border-radius:24px;cursor:pointer';
+            button.addEventListener('pointerdown', event => event.stopPropagation());
+            button.addEventListener('mousedown', event => event.stopPropagation());
+            button.addEventListener('touchstart', event => event.stopPropagation());
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                if (this.layout === 'LINE') return;
+                this.useShape = !this.useShape;
+                this.applyArrangement(true);
+            });
+            this.container.appendChild(button);
+            this.shapeButton = button;
+            this.updateShapeButton();
+        }
 
         // 6. EVENTS
         if (!this.eventsBound) {
@@ -108,6 +129,7 @@ export class View3D {
         const geometry = new THREE.PlaneGeometry(1, 1);
         const count = this.images.length;
         const vector = new THREE.Vector3();
+        const shape = this.useShape ? shapePositions(this.shapeEmoji, count, Math.max(25, this.sphereSpacing * Math.sqrt(count))) : [];
 
         // Dynamic Radius: Expand sphere based on image count
         // sqrt(N) ensures constant surface density
@@ -142,7 +164,7 @@ export class View3D {
             });
 
             const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.set(x, y, z);
+            mesh.position.set(...(shape[i] || [x, y, z]));
 
             // Set initial scale to placeholders
             mesh.scale.set(5, 3.5, 1);
@@ -152,9 +174,9 @@ export class View3D {
             // when they are at the center of the viewport.
             vector.copy(mesh.position);
             // We want them to point slightly more "outward" but maintain a pleasant curve
-            mesh.lookAt(vector.x * 2, vector.y * 2, vector.z * 2);
+            if (!this.useShape) mesh.lookAt(vector.x * 2, vector.y * 2, vector.z * 2);
 
-            mesh.userData = { index: i, originalPos: mesh.position.clone() };
+            mesh.userData = { index: i, originalPos: mesh.position.clone(), originalQuaternion: mesh.quaternion.clone() };
             this.pivot.add(mesh);
             this.frames.push(mesh);
 
@@ -170,13 +192,53 @@ export class View3D {
                 const REF_HEIGHT = this.isMobile ? 8 : 5;
                 const aspect = tex.image.width / tex.image.height;
 
-                mesh.scale.set(REF_HEIGHT * aspect, REF_HEIGHT, 1);
+                // Cap panoramic width so adjacent frames remain selectable.
+                const fit = this.shapeEmoji ? Math.min(1, 9 / (REF_HEIGHT * aspect)) : 1;
+                mesh.scale.set(REF_HEIGHT * aspect * fit, REF_HEIGHT * fit, 1);
 
                 material.map = tex;
                 material.color.setHex(0xffffff); // Reset color to white once loaded
                 material.needsUpdate = true;
             });
         }
+    }
+
+    updateShapeButton() {
+        if (!this.shapeButton) return;
+        this.shapeButton.textContent = this.useShape ? 'View Sphere' : `View ${this.shapeEmoji} Shape`;
+        this.shapeButton.setAttribute('aria-label', this.shapeButton.textContent);
+        this.shapeButton.hidden = this.layout === 'LINE';
+    }
+
+    applyArrangement(animate = false) {
+        const count = this.frames.length;
+        const shape = this.useShape ? shapePositions(this.shapeEmoji, count, this.radius) : [];
+        const aspect = window.innerWidth / window.innerHeight;
+        const stretch = aspect < 1 ? (1 / aspect) * .8 : 1;
+        const duration = animate && !this.reducedMotion ? .8 : 0;
+        gsap.killTweensOf(this.pivot.rotation);
+        this.isTransitioning = false;
+        this.targetRotation = {x: 0, y: 0};
+        this.currentRotation = {x: 0, y: 0};
+        this.pivot.rotation.set(0, 0, 0);
+        this.frames.forEach((mesh, i) => {
+            const phi = Math.acos(-1 + 2 * i / count), theta = Math.sqrt(count * Math.PI) * phi;
+            const position = new THREE.Vector3(...(shape[i] || [
+                this.radius * Math.cos(theta) * Math.sin(phi),
+                this.radius * Math.sin(theta) * Math.sin(phi) * stretch,
+                this.radius * Math.cos(phi)]));
+            const target = new THREE.Object3D();
+            target.position.copy(position);
+            if (!this.useShape) target.lookAt(position.clone().multiplyScalar(2));
+            mesh.userData.originalPos = position;
+            mesh.userData.originalQuaternion = target.quaternion.clone();
+            gsap.to(mesh.position, {x: position.x, y: position.y, z: position.z, duration, overwrite: true});
+            gsap.to(mesh.quaternion, {x: target.quaternion.x, y: target.quaternion.y, z: target.quaternion.z, w: target.quaternion.w, duration, overwrite: true});
+        });
+        this.baseDistance = this.getOptimalDistance();
+        this.isZoomedIn = false;
+        gsap.to(this.camera.position, {z: this.baseDistance, duration, overwrite: true});
+        this.updateShapeButton();
     }
 
     createParticles() {
@@ -237,6 +299,11 @@ export class View3D {
         // Add a small extra bump if the detection specifically says it's a mobile device UA
         if (this.isMobile) multiplier *= 1.1;
 
+        if (this.useShape) {
+            // Fit a bounding sphere including photo corners at any orbit angle.
+            const halfFov = Math.atan(Math.tan(Math.PI / 6) * Math.min(1, aspect));
+            return (this.radius * 1.45 + 10) / Math.sin(halfFov);
+        }
         return this.radius * Math.min(7, multiplier);
     }
 
@@ -444,6 +511,7 @@ export class View3D {
 
     enterLineView(targetIndex) {
         this.layout = 'LINE';
+        this.updateShapeButton();
         this.currentIndex = targetIndex;
         this.isTransitioning = true; // Disable physics during layout change
 
@@ -505,45 +573,7 @@ export class View3D {
     exitLineView() {
         if (this.layout !== 'LINE') return;
         this.layout = 'SPHERE';
-
-        // 1. Reset Camera to Sphere base distance (Reset zoom)
-        const defaultSphereDist = this.getOptimalDistance();
-
-        // Update state so resize respects this reset
-        this.baseDistance = defaultSphereDist;
-
-        gsap.to(this.camera.position, { z: defaultSphereDist, duration: 1.0, ease: "power2.inOut" });
-
-        // 2. Return frames to Sphere positions AND Rotations
-        const dummy = new THREE.Object3D(); // Helper to calculate target rotation
-
-        this.frames.forEach((mesh, i) => {
-            const original = mesh.userData.originalPos;
-
-            // Calculate Target Rotation (Look away from center)
-            dummy.position.copy(original);
-            dummy.lookAt(original.clone().multiplyScalar(2));
-            dummy.updateMatrix(); // Ensure rotation is updated
-
-            // Animate Position
-            gsap.to(mesh.position, {
-                x: original.x,
-                y: original.y,
-                z: original.z,
-                duration: 1.0,
-                ease: "power2.inOut"
-            });
-
-            // Animate Rotation (Quaternion)
-            gsap.to(mesh.quaternion, {
-                x: dummy.quaternion.x,
-                y: dummy.quaternion.y,
-                z: dummy.quaternion.z,
-                w: dummy.quaternion.w,
-                duration: 1.0,
-                ease: "power2.inOut"
-            });
-        });
+        this.applyArrangement(true);
     }
 
     selectIndex(index) {
@@ -598,7 +628,7 @@ export class View3D {
         }
 
         // Auto Rotate
-        if (!this.isDragging && !this.isTransitioning) {
+        if (!this.isDragging && !this.isTransitioning && !this.useShape && !this.reducedMotion && this.layout !== 'LINE') {
             // Speed should be "per second" now if using dt, but targetRotation is position accumulator
             // Original: += 0.0005 per frame. At 60fps -> 0.03 per second.
             this.targetRotation.y += 0.03 * dt;
@@ -675,6 +705,7 @@ export class View3D {
                 });
                 this.frames = [];
                 this.createFrames();
+                if (this.layout === 'LINE') this.enterLineView(this.currentIndex);
             }
         }
 

@@ -79,3 +79,16 @@ Customize the gallery experience using query parameters. Append these to your UR
 ## Example Portfolios using gallery
 
 1. [TheDoShoots](https://timothydo.me/photography) by Timothy Do
+## Optional 3D shape emoji
+
+Set this in the gallery HTML head to select a layout:
+
+```html
+<meta name="gallery-shape-emoji" content="⭐">
+```
+
+Supported values: ⭐ star, 🌳 tree, 🐕 dog, ✈️ airplane, 🏙️ skyline, 🍎 apple. Blank, missing, and unsupported values use the existing sphere. Variation selectors are accepted. No configuration is required for standalone galleries.
+
+Shapes are deterministic photo outlines with shallow depth, designed for a recognizable front view while remaining orbitable in 3D. Complex outlines become abstract with small image counts; 25 is a useful starting point. Every source image receives one position, with no duplicated photos. Shape galleries open facing forward and offer a View Sphere / View Shape button. Returning from photo view restores the selected arrangement. Shape switching respects reduced motion. 2D remains unchanged.
+
+Add outlines in `js/shapes.js`; positioning and transitions are integrated in `js/view3d.js`. Run `node --test tests/shapes.test.mjs` to verify count preservation, deterministic positions, and fallback resolution.

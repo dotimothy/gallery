@@ -1,6 +1,6 @@
 
-// Three.js is loaded globally via CDN
-const THREE = window.THREE;
+// Three.js is loaded when the sphere is requested.
+let THREE;
 
 export class View3D {
     constructor(container) {
@@ -38,6 +38,7 @@ export class View3D {
 
     init(images, onSelect, onPreload, isMobile = false, isDebug = false, onMagnify = null) {
         this.onMagnify = onMagnify;
+        THREE = window.THREE;
         this.clock = new THREE.Clock();
 
         this.images = images;

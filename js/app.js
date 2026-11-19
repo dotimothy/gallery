@@ -1,5 +1,5 @@
 
-import { View3D } from './view3d.js';
+import { View3D } from './view3d.js?v=3';
 import { View2D } from './view2d.js';
 import { SettingsManager } from './settings.js';
 import { ViewStateManager } from './ViewStateManager.js';
@@ -257,22 +257,40 @@ class App {
     }
 
     async loadData() {
+        const controller = new AbortController();
+        const metadataTimeout = setTimeout(() => controller.abort(), 8000);
         try {
-            const response = await fetch('./metadata/metadata.json', {
-                signal: AbortSignal.timeout(8000)
-            });
+            const response = await fetch('./metadata/metadata.json', { signal: controller.signal });
             if (!response.ok) throw new Error(`Metadata request failed (${response.status})`);
             this.metadata = await response.json();
             this.images = this.metadata.image_order || Object.keys(this.metadata);
         } catch (error) {
             this.log('Metadata unavailable, using the static image list.', error);
             this.useStaticFallback();
+        } finally {
+            clearTimeout(metadataTimeout);
         }
 
         // Each view loads thumbnails as it renders. Browsing can start while they arrive.
         this.view2d.init(this.images, (index) => this.selectImage(index, true), this.metadata, this.isDebug);
+        if (this.mode === '3D' && !await this.initializeSphere()) this.mode = '2D';
+        this.switchMode(this.mode);
+        this.handleURLParams();
+        this.typeTitle();
+        this.ui.loadingScreen.classList.add('hidden');
+        this.preloadFullImages();
+    }
+
+    async initializeSphere() {
+        if (this.sphereReady) return true;
+
+        const button = this.ui.layoutButtons[1];
+        button.disabled = true;
         try {
-            if (!window.THREE || !window.gsap) throw new Error('3D libraries unavailable');
+            await Promise.all([
+                this.loadSphereScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js', 'THREE'),
+                this.loadSphereScript('https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js', 'gsap')
+            ]);
             this.view3d.init(
                 this.images,
                 (index, openViewer) => this.selectImage(index, openViewer),
@@ -281,19 +299,41 @@ class App {
                 this.isDebug,
                 () => { if (!this.isSlideshowActive) this.toggleMagnifier(); }
             );
+            this.sphereReady = true;
+            button.removeAttribute('title');
+            return true;
         } catch (error) {
             this.log('3D view unavailable, showing the grid.', error);
-            const sphereButton = document.querySelector('[data-layout="3D"]');
-            sphereButton.disabled = true;
-            sphereButton.title = '3D is unavailable on this device';
-            this.mode = '2D';
+            button.title = '3D could not load. Select 3D to try again.';
+            this.ui.sphereHint.hidden = false;
+            this.ui.sphereHint.textContent = '3D could not load. You can browse in Grid.';
+            clearTimeout(this.sphereHintTimer);
+            this.sphereHintTimer = setTimeout(() => { this.ui.sphereHint.hidden = true; }, 5000);
+            return false;
+        } finally {
+            button.disabled = false;
         }
+    }
 
-        this.switchMode(this.mode);
-        this.handleURLParams();
-        this.typeTitle();
-        this.ui.loadingScreen.classList.add('hidden');
-        this.preloadFullImages();
+    loadSphereScript(url, globalName) {
+        if (window[globalName]) return Promise.resolve();
+
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            const finish = () => {
+                clearTimeout(timeout);
+                script.onload = null;
+                script.onerror = null;
+                script.remove();
+                if (window[globalName]) resolve();
+                else reject(new Error(`Could not load ${globalName}`));
+            };
+            const timeout = setTimeout(finish, 4000);
+            script.onload = finish;
+            script.onerror = finish;
+            script.src = url;
+            document.head.append(script);
+        });
     }
 
     applySetting(key, value) {
@@ -422,8 +462,11 @@ class App {
         }
 
         this.ui.layoutButtons.forEach(button => {
-            button.onclick = () => {
-                if (button.dataset.layout !== this.mode) this.switchMode(button.dataset.layout);
+            button.onclick = async () => {
+                if (!this.images.length || button.dataset.layout === this.mode) return;
+                const layout = button.dataset.layout;
+                if (layout === '3D' && !await this.initializeSphere()) return;
+                if (this.viewState.getState() === 'explore') this.switchMode(layout);
             };
         });
         window.addEventListener('resize', () => {
@@ -641,14 +684,15 @@ class App {
             button.setAttribute('aria-pressed', String(button.dataset.layout === newMode));
         });
 
-        this.ui.sphereHint.hidden = true;
+        if (newMode === '3D') this.ui.sphereHint.hidden = true;
         if (newMode === '3D' && !this.hasShownSphereHint) {
             this.hasShownSphereHint = true;
             this.ui.sphereHint.hidden = false;
             this.ui.sphereHint.textContent = this.isMobile
                 ? 'Drag to rotate · Tap a photo'
                 : 'Drag to rotate · Click a photo';
-            setTimeout(() => { this.ui.sphereHint.hidden = true; }, 5000);
+            clearTimeout(this.sphereHintTimer);
+            this.sphereHintTimer = setTimeout(() => { this.ui.sphereHint.hidden = true; }, 5000);
         }
 
         const footerParent = newMode === '2D' ? this.ui.grid : document.getElementById('ui-layer');
@@ -662,7 +706,8 @@ class App {
             this.ui.leftArrow.hidden = true;
             this.ui.rightArrow.hidden = true;
         } else {
-            this.view3d.hide(); // This calls pauseRendering() internal to View3D
+            this.view3d.hide();
+            this.view3d.pauseRendering();
             this.view2d.show();
 
             this.ui.leftArrow.hidden = true;

@@ -7,14 +7,16 @@ import { TouchManager } from './TouchManager.js';
 
 class App {
     constructor() {
-        this.mode = '3D'; // Start in 3D
+        const params = new URLSearchParams(window.location.search);
+        this.mode = params.get('mode') === '2d' || params.has('gallery') ? '2D' : '3D';
         this.currentIndex = 0;
         this.images = [];
         this.metadata = {};
         this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1);
 
         // Debug Flag
-        this.isDebug = new URLSearchParams(window.location.search).has('debug');
+        this.isDebug = params.has('debug');
+        document.getElementById('fps-counter').hidden = !this.isDebug;
 
         // Touch State
         this.touchStartX = 0;
@@ -31,7 +33,10 @@ class App {
         // Elements
         this.ui = {
             title: document.getElementById('title'),
-            toggle: document.getElementById('mode-toggle'),
+            layoutButtons: document.querySelectorAll('#layout-switch button'),
+            sphereHint: document.getElementById('sphere-hint'),
+            footer: document.getElementById('gallery-footer'),
+            grid: document.getElementById('gallery-2d'),
             controlsContainer: document.getElementById('controls-container'), // New
             controlsToggle: document.getElementById('controls-toggle'), // New
 
@@ -62,7 +67,7 @@ class App {
 
         // Initialize Views
         this.view3d = new View3D(document.getElementById('gallery-3d'));
-        this.view2d = new View2D(document.getElementById('gallery-2d'));
+        this.view2d = new View2D(this.ui.grid);
         // (Init called in loadData)
 
         // Settings System
@@ -93,8 +98,15 @@ class App {
             this.ui.imageViewer.hidden = false;
             this.ui.imageViewer.classList.add('visible');
 
-            // Show keyboard hint, then fade out after 4 seconds
+            this.ui.sphereHint.hidden = true;
+            this.ui.controlsContainer.inert = true;
+            if (this.mode === '2D') this.ui.grid.inert = true;
+
+            // Fade the navigation hint after four seconds.
             if (this.ui.viewerHint) {
+                this.ui.viewerHint.textContent = this.isMobile
+                    ? 'Swipe for next or previous photo'
+                    : '← → navigate · Esc close · i info';
                 this.ui.viewerHint.style.opacity = '1';
                 clearTimeout(this._hintTimer);
                 this._hintTimer = setTimeout(() => {
@@ -104,7 +116,7 @@ class App {
 
             // Move keyboard focus into the dialog
             setTimeout(() => {
-                if (this.ui.imageViewer) this.ui.imageViewer.focus();
+                if (!this.ui.imageViewer.hidden) this.ui.imageViewer.focus();
             }, 50);
 
             // 3D Rendering Management:
@@ -216,11 +228,6 @@ class App {
     handleURLParams() {
         const urlParams = new URLSearchParams(window.location.search);
         this.useDataSaver = urlParams.has('datasaver');
-
-        // Mode
-        if (urlParams.get('mode') === '2d' || urlParams.has('gallery')) {
-            this.switchMode('2D');
-        }
 
         // Initial Selection (Deep link)
         let initialIndex = 0;
@@ -377,7 +384,6 @@ class App {
             'resolution': { id: 'disp-resolution', suffix: 'x' },
             'sphereSpacing': { id: 'disp-sphere', suffix: '' },
             'particleCount': { id: 'disp-particles', suffix: '' },
-            'gridColumns': { id: 'disp-grid', suffix: '' },
             'slideshowInterval': { id: 'disp-interval', suffix: 's' },
             'sensitivity': { id: 'disp-sensitivity', suffix: 'x' }
         };
@@ -567,10 +573,11 @@ class App {
             };
         }
 
-        this.ui.toggle.onclick = () => {
-            const newMode = this.mode === '3D' ? '2D' : '3D';
-            this.switchMode(newMode);
-        };
+        this.ui.layoutButtons.forEach(button => {
+            button.onclick = () => {
+                if (button.dataset.layout !== this.mode) this.switchMode(button.dataset.layout);
+            };
+        });
         window.addEventListener('resize', () => {
             if (this.mode === '3D') this.view3d.resize();
         });
@@ -712,7 +719,9 @@ class App {
         bindInput('set-resolution', 'resolution', true);
         bindInput('set-sphere', 'sphereSpacing', true);
         bindInput('set-particles', 'particleCount', false);
-        bindInput('set-grid', 'gridColumns', false);
+        document.getElementById('set-grid').onchange = ({ target }) => {
+            this.settings.set('gridColumns', target.value === 'auto' ? 'auto' : Number(target.value));
+        };
         bindInput('set-interval', 'slideshowInterval', true);
         bindInput('set-sensitivity', 'sensitivity', true);
 
@@ -780,10 +789,22 @@ class App {
         this.closeFullscreen();
 
         this.mode = newMode;
-        if (this.ui.toggle) {
-            this.ui.toggle.innerText = newMode === '3D' ? '2D' : '3D';
-            this.ui.toggle.setAttribute('aria-label', newMode === '3D' ? 'Switch to 2D layout' : 'Switch to 3D view');
+        this.ui.layoutButtons.forEach(button => {
+            button.setAttribute('aria-pressed', String(button.dataset.layout === newMode));
+        });
+
+        this.ui.sphereHint.hidden = true;
+        if (newMode === '3D' && !this.hasShownSphereHint) {
+            this.hasShownSphereHint = true;
+            this.ui.sphereHint.hidden = false;
+            this.ui.sphereHint.textContent = this.isMobile
+                ? 'Drag to rotate · Tap a photo'
+                : 'Drag to rotate · Click a photo';
+            setTimeout(() => { this.ui.sphereHint.hidden = true; }, 5000);
         }
+
+        const footerParent = newMode === '2D' ? this.ui.grid : document.getElementById('ui-layer');
+        footerParent.append(this.ui.footer);
 
         if (newMode === '3D') {
             this.view2d.hide();
@@ -814,6 +835,9 @@ class App {
             // Wrap-around logic? If jumping from last to first (future feature), handle here.
         }
 
+        if (this.mode === '2D' && openViewer && this.viewState.getState() === 'explore') {
+            this.gridOpener = index;
+        }
         this.currentIndex = index;
 
         // Sync Views
@@ -1800,6 +1824,7 @@ class App {
         if (this.ui.viewerControlsContainer) {
             this.ui.viewerControlsContainer.classList.remove('expanded');
             if (this.ui.viewerControlsToggle) {
+                this.ui.viewerControlsToggle.setAttribute('aria-expanded', 'false');
                 const iconMenu = this.ui.viewerControlsToggle.querySelector('.icon-menu');
                 const iconClose = this.ui.viewerControlsToggle.querySelector('.icon-close');
                 if (iconMenu) iconMenu.classList.remove('hidden');
@@ -1829,20 +1854,28 @@ class App {
             if (g3d) {
                 g3d.style.display = 'block';
                 requestAnimationFrame(() => {
-                    this.view3d.resumeRendering();
+                    if (this.mode === '3D') this.view3d.resumeRendering();
                     // Exit line view to return to sphere
                     this.view3d.exitLineView();
                 });
             }
         } else {
             const g2d = document.getElementById('gallery-2d');
-            if (g2d) g2d.style.display = 'grid';
+            if (g2d) {
+                g2d.style.display = 'grid';
+                g2d.inert = false;
+            }
+            if (currentState === 'preview' && this.gridOpener !== undefined) {
+                this.view2d.focusThumbnail(this.gridOpener);
+            }
+            this.gridOpener = undefined;
         }
 
         // 5. Restore Global UI
         if (this.ui.controlsContainer) {
             // activateImmersiveViewer sets display:none inline; clear it so
             // the controls participate in layout again and can fade in.
+            this.ui.controlsContainer.inert = false;
             this.ui.controlsContainer.style.display = '';
             this.ui.controlsContainer.style.opacity = '1';
             this.ui.controlsContainer.style.pointerEvents = 'auto';

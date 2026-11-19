@@ -74,11 +74,6 @@ export class View2D {
             this.container.appendChild(thumb);
         });
 
-        // Add footer spacer
-        const spacer = document.createElement('div');
-        spacer.style.width = '100%';
-        spacer.style.height = '100px';
-        this.container.appendChild(spacer);
     }
 
     goToIndex(index) {
@@ -93,7 +88,12 @@ export class View2D {
         }
     }
 
+    focusThumbnail(index) {
+        this.container.getElementsByClassName('thumb')[index]?.focus();
+    }
+
     show() {
+        this.container.inert = false;
         this.container.classList.add('active');
         this.container.classList.remove('hidden'); // Just in case
     }
@@ -101,11 +101,16 @@ export class View2D {
     updateSettings(key, value) {
         if (key === 'gridColumns') {
             if (this.isDebug) console.log(`[View2D] Update gridColumns: ${value}`);
-            this.container.style.setProperty('--col-count', value);
+            if (value === 'auto') {
+                this.container.style.removeProperty('--col-count');
+            } else {
+                this.container.style.setProperty('--col-count', value);
+            }
         }
     }
 
     hide() {
+        this.container.inert = true;
         this.container.classList.remove('active');
         this.container.classList.add('hidden');
     }

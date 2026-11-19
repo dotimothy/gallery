@@ -1,5 +1,5 @@
 
-import { View3D } from './view3d.js?v=4';
+import { View3D } from './view3d.js?v=5';
 import { View2D } from './view2d.js';
 import { SettingsManager } from './settings.js';
 import { ViewStateManager } from './ViewStateManager.js';

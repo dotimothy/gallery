@@ -10,6 +10,8 @@ export class View3D {
         this.renderer = null;
         this.pivot = null;
         this.frames = [];
+        this.textureQueue = [];
+        this.activeTextureLoads = 0;
         this.images = [];
 
         // Config
@@ -161,24 +163,36 @@ export class View3D {
             this.pivot.add(mesh);
             this.frames.push(mesh);
 
-            // Lazy Load Texture
-            const imgName = this.images[i];
-            new THREE.TextureLoader().load(`./thumbs/${imgName}.jpg`, (tex) => {
-                tex.encoding = THREE.sRGBEncoding;
-                tex.minFilter = THREE.LinearFilter;
+            this.textureQueue.push({ mesh, image: this.images[i] });
+        }
+        this.loadQueuedTextures();
+    }
 
-                // Adjust scale for aspect ratio
-                // We want a fixed height (Reference height 5 is good for visibility)
-                // User Request 3: Larger icons on mobile
-                const REF_HEIGHT = this.isMobile ? 8 : 5;
-                const aspect = tex.image.width / tex.image.height;
+    loadQueuedTextures() {
+        while (this.activeTextureLoads < 3 && this.textureQueue.length) {
+            const { mesh, image } = this.textureQueue.shift();
+            if (mesh.parent !== this.pivot) continue;
 
-                mesh.scale.set(REF_HEIGHT * aspect, REF_HEIGHT, 1);
+            this.activeTextureLoads++;
+            const finish = () => {
+                this.activeTextureLoads--;
+                this.loadQueuedTextures();
+            };
 
-                material.map = tex;
-                material.color.setHex(0xffffff); // Reset color to white once loaded
-                material.needsUpdate = true;
-            });
+            new THREE.TextureLoader().load(`./thumbs/${image}.jpg`, (texture) => {
+                if (mesh.parent === this.pivot) {
+                    texture.encoding = THREE.sRGBEncoding;
+                    texture.minFilter = THREE.LinearFilter;
+                    const height = this.isMobile ? 8 : 5;
+                    const aspect = texture.image.width / texture.image.height;
+                    mesh.scale.set(height * aspect, height, 1);
+                    mesh.material.map = texture;
+                    mesh.material.needsUpdate = true;
+                } else {
+                    texture.dispose();
+                }
+                finish();
+            }, undefined, finish);
         }
     }
 
@@ -677,6 +691,7 @@ export class View3D {
                     }
                 });
                 this.frames = [];
+                this.textureQueue = [];
                 this.createFrames();
             }
         }

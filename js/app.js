@@ -276,7 +276,6 @@ class App {
         if (this.mode === '3D' && !await this.initializeSphere()) this.mode = '2D';
         this.switchMode(this.mode);
         this.handleURLParams();
-        this.typeTitle();
         this.ui.loadingScreen.classList.add('hidden');
         this.preloadFullImages();
     }
@@ -809,17 +808,6 @@ class App {
         let prevIndex = this.currentIndex - 1;
         if (prevIndex < 0) prevIndex = this.images.length - 1; // Loop to end
         this.selectImage(prevIndex, false, -1);
-    }
-
-    typeTitle() {
-        const titleText = "📷 Gallery Template!!! 📷";
-        let i = 0;
-        this.ui.title.innerText = "";
-        const interval = setInterval(() => {
-            this.ui.title.innerText += titleText.charAt(i);
-            i++;
-            if (i > titleText.length) clearInterval(interval);
-        }, 50);
     }
 
     // --- Slideshow Logic ---

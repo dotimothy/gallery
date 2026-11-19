@@ -1,5 +1,5 @@
 
-import { View3D } from './view3d.js?v=3';
+import { View3D } from './view3d.js?v=4';
 import { View2D } from './view2d.js';
 import { SettingsManager } from './settings.js';
 import { ViewStateManager } from './ViewStateManager.js';
@@ -288,8 +288,8 @@ class App {
         button.disabled = true;
         try {
             await Promise.all([
-                this.loadSphereScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js', 'THREE'),
-                this.loadSphereScript('https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js', 'gsap')
+                this.loadSphereScript('./js/vendor/three-r128.min.js', 'THREE'),
+                this.loadSphereScript('./js/vendor/gsap-3.12.2.min.js', 'gsap')
             ]);
             this.view3d.init(
                 this.images,
@@ -306,7 +306,9 @@ class App {
             this.log('3D view unavailable, showing the grid.', error);
             button.title = '3D could not load. Select 3D to try again.';
             this.ui.sphereHint.hidden = false;
-            this.ui.sphereHint.textContent = '3D could not load. You can browse in Grid.';
+            this.ui.sphereHint.textContent = error.name === 'WebGLUnavailableError'
+                ? 'This browser could not start WebGL. You can browse in Grid.'
+                : '3D could not load. You can browse in Grid.';
             clearTimeout(this.sphereHintTimer);
             this.sphereHintTimer = setTimeout(() => { this.ui.sphereHint.hidden = true; }, 5000);
             return false;

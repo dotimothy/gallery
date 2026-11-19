@@ -51,11 +51,16 @@ export class View3D {
 
         // 1. SETUP RENDERER
         if (!this.renderer) {
-            this.renderer = new THREE.WebGLRenderer({
-                alpha: true,
-                antialias: true,
-                powerPreference: "high-performance"
-            });
+            try {
+                this.renderer = new THREE.WebGLRenderer({
+                    alpha: true,
+                    antialias: !isMobile
+                });
+            } catch (cause) {
+                const error = new Error('Could not create a WebGL renderer', { cause });
+                error.name = 'WebGLUnavailableError';
+                throw error;
+            }
             this.renderer.outputEncoding = THREE.sRGBEncoding;
             this.renderer.toneMapping = THREE.NoToneMapping;
             this.renderer.setSize(window.innerWidth, window.innerHeight);

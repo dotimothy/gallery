@@ -258,94 +258,21 @@ class App {
 
     async loadData() {
         try {
-            // 1. Try Loading Metadata
-            const response = await fetch('./metadata/metadata.json');
-            if (!response.ok) throw new Error("Metadata check failed");
-            const data = await response.json();
-
-            // 2. Parse Data
-            this.metadata = data;
-            // image_order contains filenames without extension/path based on viewing file
-            // Actually the file says "image_order": ["0", "1", ...]
-            // And keys are "0", "1".
-            // So we can use image_order directly.
-            this.images = data.image_order || Object.keys(data).filter(k => k !== 'image_order');
-
-            this.log(`Loaded metadata with ${this.images.length} images.`);
-
-            // 3. Preload Thumbnails (Blocking)
-            await this.preloadAllThumbnails();
-
-            // 4. Init 3D View
-            this.view3d.init(
-                this.images,
-                (index, openViewer) => this.selectImage(index, openViewer),
-                (index) => this.preloadHighRes(index),
-                this.isMobile,
-                this.isDebug,
-                () => { if (!this.isSlideshowActive) this.toggleMagnifier(); } // Auto-Magnify Callback
-            );
-
-            // 5. Init 2D View
-            this.view2d.init(this.images, (index) => this.selectImage(index, true), this.metadata); // Original selectImage
-
-            // 6. Apply initial state and URL params
-            this.switchMode(this.mode); // Reset to default first
-            this.handleURLParams();
-            this.typeTitle();
-
-            // 7. Start App - Smooth Transition
-            if (typeof gsap !== 'undefined') {
-                const tl = gsap.timeline({
-                    onComplete: () => {
-                        if (this.ui.loadingScreen) this.ui.loadingScreen.classList.add('hidden');
-                    }
-                });
-
-                // Fade out loading screen with a subtle zoom
-                if (this.ui.loadingScreen) {
-                    tl.to(this.ui.loadingScreen, {
-                        opacity: 0,
-                        scale: 1.05,
-                        duration: 0.6,
-                        ease: "power2.inOut",
-                        pointerEvents: "none"
-                    });
-                }
-
-                // Fade in Gallery & UI Elements (Staggered)
-                const gallery3d = document.getElementById('gallery-3d');
-                const gallery2d = document.getElementById('gallery-2d');
-                const thumbs = document.getElementById('thumbnail-selector');
-                const elementsToFade = [gallery3d, gallery2d, this.ui.title, this.ui.controlsContainer, thumbs].filter(Boolean);
-
-                if (elementsToFade.length > 0) {
-                    tl.fromTo(elementsToFade,
-                        { opacity: 0, y: 10 },
-                        { opacity: 1, y: 0, duration: 0.9, stagger: 0.06, ease: "power2.out" },
-                        "-=0.3"
-                    );
-                }
-            } else {
-                // Fallback
-                if (this.ui.loadingScreen) this.ui.loadingScreen.classList.add('hidden');
-                const gallery3d = document.getElementById('gallery-3d');
-                const gallery2d = document.getElementById('gallery-2d');
-                const thumbs = document.getElementById('thumbnail-selector');
-                const elements = [gallery3d, gallery2d, this.ui.title, this.ui.controlsContainer, thumbs].filter(Boolean);
-                elements.forEach(el => el.style.opacity = '1');
-            }
-
-            // 8. Silent Background Preload
-            this.preloadFullImages();
-
-            // (Previous Init calls moved up)
-
+            const response = await fetch('./metadata/metadata.json', {
+                signal: AbortSignal.timeout(8000)
+            });
+            if (!response.ok) throw new Error(`Metadata request failed (${response.status})`);
+            this.metadata = await response.json();
+            this.images = this.metadata.image_order || Object.keys(this.metadata);
         } catch (error) {
-            if (this.isDebug) console.warn("Metadata load failed, falling back to static list.", error);
-            document.getElementById('loading-text').innerText = "Error loading gallery."; // Original error message
+            this.log('Metadata unavailable, using the static image list.', error);
             this.useStaticFallback();
-            // Re-init views with fallback data
+        }
+
+        // Each view loads thumbnails as it renders. Browsing can start while they arrive.
+        this.view2d.init(this.images, (index) => this.selectImage(index, true), this.metadata, this.isDebug);
+        try {
+            if (!window.THREE || !window.gsap) throw new Error('3D libraries unavailable');
             this.view3d.init(
                 this.images,
                 (index, openViewer) => this.selectImage(index, openViewer),
@@ -354,12 +281,19 @@ class App {
                 this.isDebug,
                 () => { if (!this.isSlideshowActive) this.toggleMagnifier(); }
             );
-            this.view2d.init(this.images, (index) => this.selectImage(index, true), {}, this.isDebug);
-
-            this.switchMode(this.mode); // Initial State
-            this.handleURLParams();
-            this.typeTitle();
+        } catch (error) {
+            this.log('3D view unavailable, showing the grid.', error);
+            const sphereButton = document.querySelector('[data-layout="3D"]');
+            sphereButton.disabled = true;
+            sphereButton.title = '3D is unavailable on this device';
+            this.mode = '2D';
         }
+
+        this.switchMode(this.mode);
+        this.handleURLParams();
+        this.typeTitle();
+        this.ui.loadingScreen.classList.add('hidden');
+        this.preloadFullImages();
     }
 
     applySetting(key, value) {
@@ -400,92 +334,6 @@ class App {
         // Sync all settings from manager to views
         const keys = ['resolution', 'sphereSpacing', 'particleCount', 'gridColumns', 'slideshowInterval', 'sensitivity'];
         keys.forEach(k => this.applySetting(k, this.settings.get(k)));
-    }
-
-    preloadAllThumbnails() {
-        return new Promise((resolve) => {
-            const total = this.images.length;
-            const text = document.getElementById('loading-text');
-            const bar = document.getElementById('loading-bar');
-
-            // Stats Elements
-            const elFile = document.getElementById('loading-file');
-            const elData = document.getElementById('loading-data');
-            const elSpeed = document.getElementById('loading-speed');
-
-            if (total === 0) {
-                resolve();
-                return;
-            }
-
-            let loadedCount = 0;
-            let totalBytes = 0;
-            const startTime = Date.now();
-            let activeDownloads = 0;
-
-            const updateStats = (fileName = null) => {
-                // Update Progress Bar
-                const percent = Math.round((loadedCount / total) * 100);
-                if (text) text.innerText = `Loading Gallery... ${loadedCount}/${total} (${percent}%)`;
-                if (bar) bar.style.width = `${percent}%`;
-
-                // Update File Name
-                if (fileName && elFile) elFile.innerText = `Downloading: ${fileName}.jpg`;
-
-                // Update Data & Speed
-                if (elData) elData.innerText = `${(totalBytes / (1024 * 1024)).toFixed(2)} MB`;
-
-                const elapsed = (Date.now() - startTime) / 1000; // seconds
-                if (elSpeed && elapsed > 0) {
-                    const bps = totalBytes / elapsed;
-                    // Format Speed
-                    let speedStr = '';
-                    if (bps > 1024 * 1024) speedStr = `${(bps / (1024 * 1024)).toFixed(1)} MB/s`;
-                    else speedStr = `${(bps / 1024).toFixed(1)} KB/s`;
-                    elSpeed.innerText = speedStr;
-                }
-            };
-
-            const loadNext = async (imgName) => {
-                try {
-                    activeDownloads++;
-                    updateStats(imgName);
-
-                    const response = await fetch(`./thumbs/${imgName}.jpg`);
-                    if (!response.ok) throw new Error('Network response was not ok');
-
-                    const reader = response.body.getReader();
-
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        if (value) {
-                            totalBytes += value.length;
-                            updateStats(); // Tick for speed updates
-                        }
-                    }
-
-                    // Success
-                    loadedCount++;
-                } catch (err) {
-                    if (this.isDebug) console.warn("Failed to load thumb:", imgName, err);
-                    loadedCount++; // Count as done to proceed
-                } finally {
-                    activeDownloads--;
-                    updateStats();
-
-                    if (loadedCount >= total) {
-                        if (elFile) elFile.innerText = "Processing...";
-                        resolve();
-                    }
-                }
-            };
-
-            // Launch all (Browser limits concurrency automatically, usually 6)
-            // Or we could batch? Simple loop is mostly fine for <50 items.
-            // But for safety let's just loop.
-            this.images.forEach(img => loadNext(img));
-        });
     }
 
     preloadFullImages() {

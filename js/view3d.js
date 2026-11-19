@@ -21,7 +21,7 @@ export class View3D {
         this.isTransitioning = false; // Flag to disable physics during GSAP anims
 
         // Time & Stats
-        this.clock = new THREE.Clock();
+        this.clock = null;
         this.frameCount = 0;
         this.lastTime = 0;
         this.fpsElement = document.getElementById('fps-counter');
@@ -38,10 +38,7 @@ export class View3D {
 
     init(images, onSelect, onPreload, isMobile = false, isDebug = false, onMagnify = null) {
         this.onMagnify = onMagnify;
-        if (!THREE) {
-            console.error("Three.js not loaded");
-            return;
-        }
+        this.clock = new THREE.Clock();
 
         this.images = images;
         this.onSelect = onSelect;

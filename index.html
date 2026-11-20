@@ -8,7 +8,7 @@
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📷</text></svg>">
     <!-- App CSS -->
-    <link rel="stylesheet" href="css/style.css?v=5">
+    <link rel="stylesheet" href="css/style.css?v=6">
 </head>
 
 <body>
@@ -18,7 +18,10 @@
         <!-- Loading Screen -->
         <div id="loading-screen">
             <div class="spinner"></div>
-            <div id="loading-text" role="status">Loading gallery…</div>
+            <div id="gallery-loading">
+                <label for="gallery-progress">Loading Gallery</label>
+                <progress id="gallery-progress"></progress>
+            </div>
         </div>
 
         <h1 id="title">Gallery</h1>
@@ -145,12 +148,12 @@
         </div>
 
         <div id="gallery-dock">
-            <p id="sphere-hint" role="status" hidden></p>
             <footer id="gallery-footer">
                 <h2>© <a href="https://timothydo.me/photography" target="_blank">TheDoShoots</a> 2026. By Timothy Do. <a
                         href="#" id="openLicense">All Rights Reserved</a>. <a href="https://github.com/dotimothy/gallery"
                         target="_blank">GitHub</a>.</h2>
             </footer>
+            <p id="sphere-hint" role="status" hidden></p>
         </div>
     </div>
 
@@ -240,9 +243,9 @@
             <div id="metadataViewer" class="hidden"></div>
             <div id="viewer-exif-strip" aria-hidden="true"></div>
             <div id="image-counter" aria-live="polite" aria-atomic="true"></div>
+            <div id="viewer-hint" aria-hidden="true" hidden></div>
             <div id="thumbnail-selector" class="hidden"></div>
         </div>
-        <div id="viewer-hint" aria-hidden="true"></div>
     </div>
 
     <!-- Immersive Frame (Independent Viewer) -->
@@ -268,7 +271,7 @@
     </div>
 
     <!-- App JS -->
-    <script type="module" src="js/app.js?v=9"></script>
+    <script type="module" src="js/app.js?v=10"></script>
 </body>
 
 </html>

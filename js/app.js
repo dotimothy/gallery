@@ -1,5 +1,5 @@
 
-import { View3D } from './view3d.js?v=6';
+import { View3D } from './view3d.js?v=7';
 import { View2D } from './view2d.js';
 import { SettingsManager } from './settings.js';
 import { ViewStateManager } from './ViewStateManager.js';
@@ -58,6 +58,9 @@ class App {
             lightPollutionClose: document.getElementById('lightPollutionMapCloseButton'),
             lightPollutionIframe: document.getElementById('lightPollutionMapIframe'),
             loadingScreen: document.getElementById('loading-screen'),
+            loadingIndicator: document.getElementById('gallery-loading'),
+            loadingProgress: document.getElementById('gallery-progress'),
+            galleryDock: document.getElementById('gallery-dock'),
             immersiveFrame: document.getElementById('immersive-frame'), // Added
             refresh: document.getElementById('refresh'),
             imageCounter: document.getElementById('image-counter'),
@@ -115,17 +118,12 @@ class App {
             this.ui.controlsContainer.inert = true;
             if (this.mode === '2D') this.ui.grid.inert = true;
 
-            // Fade the navigation hint after four seconds.
-            if (this.ui.viewerHint) {
-                this.ui.viewerHint.textContent = this.isMobile
-                    ? 'Swipe for next or previous photo'
-                    : '← → navigate · Esc close · i info';
-                this.ui.viewerHint.style.opacity = '1';
-                clearTimeout(this._hintTimer);
-                this._hintTimer = setTimeout(() => {
-                    if (this.ui.viewerHint) this.ui.viewerHint.style.opacity = '0';
-                }, 4000);
-            }
+            this.ui.viewerHint.textContent = this.isMobile
+                ? 'Swipe for Next or Previous Photo'
+                : '← → Navigate · Esc Close · I Info';
+            this.ui.viewerHint.hidden = false;
+            clearTimeout(this.viewerHintTimer);
+            this.viewerHintTimer = setTimeout(() => { this.ui.viewerHint.hidden = true; }, 4000);
 
             // Move keyboard focus into the dialog
             setTimeout(() => {
@@ -291,6 +289,8 @@ class App {
         if (this.mode === '3D' && !await this.initializeSphere()) this.mode = '2D';
         this.switchMode(this.mode);
         this.handleURLParams();
+        this.ui.galleryDock.prepend(this.ui.loadingIndicator);
+        if (this.mode === '2D') this.ui.loadingIndicator.hidden = true;
         this.ui.loadingScreen.classList.add('hidden');
         this.preloadFullImages();
     }
@@ -300,6 +300,8 @@ class App {
 
         const button = this.ui.layoutButtons[1];
         button.disabled = true;
+        this.ui.loadingIndicator.hidden = false;
+        this.ui.loadingProgress.removeAttribute('value');
         try {
             await Promise.all([
                 this.loadSphereScript('./js/vendor/three-r128.min.js', 'THREE'),
@@ -311,13 +313,19 @@ class App {
                 (index) => this.preloadHighRes(index),
                 this.isMobile,
                 this.isDebug,
-                () => { if (!this.isSlideshowActive) this.toggleMagnifier(); }
+                () => { if (!this.isSlideshowActive) this.toggleMagnifier(); },
+                (loaded, total) => {
+                    this.ui.loadingProgress.max = total || 1;
+                    this.ui.loadingProgress.value = loaded;
+                    if (loaded === total) this.ui.loadingIndicator.hidden = true;
+                }
             );
             this.sphereReady = true;
             button.removeAttribute('title');
             return true;
         } catch (error) {
             this.log('3D view unavailable, showing the grid.', error);
+            this.ui.loadingIndicator.hidden = true;
             button.title = '3D could not load. Select 3D to try again.';
             this.ui.sphereHint.hidden = false;
             this.ui.sphereHint.textContent = error.name === 'WebGLUnavailableError'
@@ -705,14 +713,14 @@ class App {
             this.hasShownSphereHint = true;
             this.ui.sphereHint.hidden = false;
             this.ui.sphereHint.textContent = this.isMobile
-                ? 'Drag to rotate · Tap a photo'
+                ? 'Drag to Rotate - Tap A Photo'
                 : 'Drag to Rotate - Click A Photo';
             clearTimeout(this.sphereHintTimer);
             this.sphereHintTimer = setTimeout(() => { this.ui.sphereHint.hidden = true; }, 5000);
         }
 
-        const footerParent = newMode === '2D' ? this.ui.grid : document.getElementById('gallery-dock');
-        footerParent.append(this.ui.footer);
+        if (newMode === '2D') this.ui.grid.append(this.ui.footer);
+        else this.ui.galleryDock.insertBefore(this.ui.footer, this.ui.sphereHint);
 
         if (newMode === '3D') {
             this.view2d.hide();

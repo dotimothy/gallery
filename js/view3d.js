@@ -42,8 +42,9 @@ export class View3D {
         this.animationId = null;
     }
 
-    init(images, onSelect, onPreload, isMobile = false, isDebug = false, onMagnify = null) {
+    init(images, onSelect, onPreload, isMobile = false, isDebug = false, onMagnify = null, onTextureProgress = null) {
         this.onMagnify = onMagnify;
+        this.onTextureProgress = onTextureProgress;
         THREE = window.THREE;
         this.clock = new THREE.Clock();
 
@@ -184,6 +185,8 @@ export class View3D {
 
             this.textureQueue.push({ mesh, image: this.images[i] });
         }
+        this.settledTextures = 0;
+        this.onTextureProgress?.(0, count);
         this.loadQueuedTextures();
     }
 
@@ -194,6 +197,10 @@ export class View3D {
 
             this.activeTextureLoads++;
             const finish = () => {
+                if (mesh.parent === this.pivot) {
+                    this.settledTextures++;
+                    this.onTextureProgress?.(this.settledTextures, this.frames.length);
+                }
                 this.activeTextureLoads--;
                 this.loadQueuedTextures();
             };

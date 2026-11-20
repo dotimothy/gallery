@@ -691,7 +691,7 @@ class App {
             this.ui.sphereHint.hidden = false;
             this.ui.sphereHint.textContent = this.isMobile
                 ? 'Drag to rotate · Tap a photo'
-                : 'Drag to rotate · Click a photo';
+                : 'Drag to Rotate - Click A Photo';
             clearTimeout(this.sphereHintTimer);
             this.sphereHintTimer = setTimeout(() => { this.ui.sphereHint.hidden = true; }, 5000);
         }

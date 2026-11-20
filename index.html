@@ -8,7 +8,7 @@
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📷</text></svg>">
     <!-- App CSS -->
-    <link rel="stylesheet" href="css/style.css?v=3">
+    <link rel="stylesheet" href="css/style.css?v=4">
 </head>
 
 <body>
@@ -27,7 +27,6 @@
             FPS: 60</div>
 
 
-        <p id="sphere-hint" role="status" hidden></p>
         <div id="controls-container">
             <div class="gallery-toolbar">
                 <div id="layout-switch" role="group" aria-label="Gallery layout">
@@ -145,12 +144,14 @@
             </div>
         </div>
 
-        <!-- Home / Footer -->
-        <footer id="gallery-footer">
-            <h2>© <a href="https://timothydo.me/photography" target="_blank">TheDoShoots</a> 2026. By Timothy Do. <a
-                    href="#" id="openLicense">All Rights Reserved</a>. <a href="https://github.com/dotimothy/gallery"
-                    target="_blank">GitHub</a>.</h2>
-        </footer>
+        <div id="gallery-dock">
+            <p id="sphere-hint" role="status" hidden></p>
+            <footer id="gallery-footer">
+                <h2>© <a href="https://timothydo.me/photography" target="_blank">TheDoShoots</a> 2026. By Timothy Do. <a
+                        href="#" id="openLicense">All Rights Reserved</a>. <a href="https://github.com/dotimothy/gallery"
+                        target="_blank">GitHub</a>.</h2>
+            </footer>
+        </div>
     </div>
 
     <!-- Navigation Hints / Arrows (Moved to root to ensure correct Z-Index stacking over viewer) -->
@@ -174,7 +175,7 @@
                         <path d="M18 6L6 18M6 6L18 18" />
                     </svg>
                 </button>
-                <button id="toggleMetadata" title="Info" aria-label="Toggle image info">
+                <button id="toggleMetadata" title="Info" aria-label="Toggle image info" aria-controls="metadataViewer" aria-expanded="false">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"></circle>
                         <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -235,15 +236,14 @@
         </div>
 
         <div id="full-image-container"></div>
-        <div id="thumbnail-selector" class="visible"></div>
-
-        <div id="image-counter" aria-live="polite" aria-atomic="true"></div>
-        <div id="viewer-exif-strip" aria-hidden="true"></div>
-        <div id="viewer-hint" aria-hidden="true">&#8592; &#8594; navigate &nbsp;&middot;&nbsp; Esc close &nbsp;&middot;&nbsp; i info</div>
+        <div id="viewer-dock">
+            <div id="metadataViewer" class="hidden"></div>
+            <div id="viewer-exif-strip" aria-hidden="true"></div>
+            <div id="image-counter" aria-live="polite" aria-atomic="true"></div>
+            <div id="thumbnail-selector" class="hidden"></div>
+        </div>
+        <div id="viewer-hint" aria-hidden="true"></div>
     </div>
-
-    <!-- Metadata Overlay (Moved to root for correct Z-index) -->
-    <div id="metadataViewer" class="hidden"></div>
 
     <!-- Immersive Frame (Independent Viewer) -->
     <iframe id="immersive-frame" class="hidden" src="about:blank"></iframe>
@@ -268,7 +268,7 @@
     </div>
 
     <!-- App JS -->
-    <script type="module" src="js/app.js?v=7"></script>
+    <script type="module" src="js/app.js?v=8"></script>
 </body>
 
 </html>

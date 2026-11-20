@@ -67,11 +67,7 @@ button {
 /* Previous definitions removed in favor of Unified Viewer Controls */
 
 #thumbnail-selector {
-    opacity: 0;
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
+    min-width: 0;
     height: 80px;
     background: rgba(0, 0, 0, 0.8);
     display: flex;
@@ -79,12 +75,7 @@ button {
     overflow-x: auto;
     padding: 5px;
     box-sizing: border-box;
-    transition: transform 0.3s ease;
-    z-index: 240;
-}
-
-#thumbnail-selector.hidden {
-    transform: translateY(100%);
+    pointer-events: auto;
 }
 
 #thumbnail-selector .thumb-small {
@@ -108,8 +99,7 @@ button {
 }
 
 #ui-layer button,
-#ui-layer a,
-#ui-layer h1 {
+#ui-layer a {
     pointer-events: auto;
     /* Re-enable clicks for controls */
 }
@@ -117,9 +107,14 @@ button {
 /* Title */
 #title {
     position: absolute;
-    top: 20px;
-    width: 100%;
+    top: max(20px, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100% - 380px);
     text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 2em;
     /* Adjusted roughly from 3em to fit better */
     font-weight: 900;
@@ -272,13 +267,25 @@ button {
     outline-offset: 2px;
 }
 
-#sphere-hint {
+#gallery-dock {
     position: absolute;
-    bottom: 64px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: max-content;
-    max-width: calc(100% - 32px);
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    padding: 0 max(16px, env(safe-area-inset-right))
+        max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+
+body:has(#imageViewer.visible) #gallery-dock {
+    visibility: hidden;
+}
+
+#sphere-hint {
+    max-width: 100%;
+    box-sizing: border-box;
     padding: 8px 14px;
     border-radius: 20px;
     background: rgba(0, 0, 0, 0.8);
@@ -330,16 +337,16 @@ button {
 #gallery-2d {
     --auto-columns: 5;
     position: fixed;
-    top: 0;
+    top: calc(86px + env(safe-area-inset-top));
+    bottom: 0;
     left: 0;
     width: 100%;
-    height: 100%;
     z-index: 5;
     display: grid;
     grid-template-columns: repeat(var(--col-count, var(--auto-columns)), minmax(0, 1fr));
     grid-auto-rows: min-content;
     gap: 15px;
-    padding: 100px 30px 30px 30px;
+    padding: 14px 30px 30px;
     box-sizing: border-box;
     overflow-y: auto;
     overflow-x: hidden;
@@ -418,14 +425,19 @@ button {
     height: 100%;
     background: rgba(0, 0, 0, 0.95);
     z-index: 600;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    display: grid;
+    grid-template: minmax(0, 1fr) auto / minmax(0, 1fr);
+    box-sizing: border-box;
+    padding-top: calc(74px + env(safe-area-inset-top));
 
     /* Animation */
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+#imageViewer[hidden] {
+    display: none;
 }
 
 #imageViewer.visible {
@@ -455,8 +467,10 @@ button {
 }
 
 #full-image-container {
-    width: 100%;
-    height: 100%;
+    grid-row: 1;
+    position: relative;
+    min-height: 0;
+    min-width: 0;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -484,34 +498,33 @@ button {
     /* No interaction lag during drag */
 }
 
-/* Viewer counter, EXIF strip, keyboard hint */
-#image-counter {
-    position: absolute;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: rgba(255, 255, 255, 0.55);
-    font-size: 0.75rem;
-    font-family: 'Roboto', sans-serif;
-    font-weight: 300;
-    letter-spacing: 0.12em;
+#imageViewer #viewer-dock {
+    grid-row: 2;
+    display: grid;
+    min-width: 0;
+    gap: 6px;
+    padding-bottom: env(safe-area-inset-bottom);
     pointer-events: none;
-    user-select: none;
-    z-index: 10;
-    white-space: nowrap;
+}
+
+#image-counter {
+    justify-self: center;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    padding: 2px 8px;
 }
 
 #viewer-exif-strip {
-    position: absolute;
-    bottom: 48px;
-    left: 50%;
-    transform: translateX(-50%);
     display: flex;
-    gap: 12px;
-    pointer-events: none;
-    user-select: none;
-    z-index: 10;
-    white-space: nowrap;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 8px;
+    padding-inline: 12px;
+}
+
+#viewer-exif-strip:empty {
+    display: none;
 }
 
 #viewer-exif-strip span {
@@ -527,9 +540,10 @@ button {
 
 #viewer-hint {
     position: absolute;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+    top: max(20px, env(safe-area-inset-top));
+    left: max(12px, env(safe-area-inset-left));
+    max-width: calc(100% - 202px);
+    box-sizing: border-box;
     color: rgba(255, 255, 255, 0.85);
     background: rgba(0, 0, 0, 0.75);
     border-radius: 12px;
@@ -541,7 +555,7 @@ button {
     pointer-events: none;
     user-select: none;
     z-index: 10;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
     transition: opacity 1s ease;
 }
 
@@ -571,26 +585,13 @@ button {
     }
 }
 
-/* Metadata Overlay (Shared) */
 #metadataViewer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    background: linear-gradient(to top, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0));
-    padding: 20px;
-    padding-bottom: 40px;
-    box-sizing: border-box;
-    pointer-events: none;
-    transition: opacity 0.3s, transform 0.3s;
-    z-index: 700;
+    max-height: min(28dvh, 13rem);
+    overflow: auto;
+    overflow-wrap: anywhere;
+    background: #111;
+    padding: 12px 16px;
     text-align: left;
-    transform: translateY(100%);
-    /* Hidden by default */
-}
-
-#metadataViewer.visible {
-    transform: translateY(0);
     pointer-events: auto;
 }
 
@@ -630,7 +631,7 @@ button {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: background 0.3s, border-color 0.3s, transform 0.3s;
     backdrop-filter: blur(5px);
     z-index: 221;
     color: white;
@@ -718,8 +719,13 @@ button {
         height: 44px;
     }
 
+    #imageViewer {
+        padding-top: calc(64px + env(safe-area-inset-top));
+    }
+
     #viewer-hint {
-        top: calc(64px + env(safe-area-inset-top));
+        top: max(10px, env(safe-area-inset-top));
+        max-width: calc(100% - 186px - env(safe-area-inset-left) - env(safe-area-inset-right));
     }
 }
 
@@ -732,37 +738,14 @@ button {
     }
 
     #gallery-2d {
-        padding-top: calc(120px + env(safe-area-inset-top));
+        top: calc(108px + env(safe-area-inset-top));
+        padding-top: 12px;
     }
 
     #title {
-        font-size: 1.3em;
-        /* Slightly larger for a clear header */
         top: max(15px, env(safe-area-inset-top));
-        /* The very top */
-        left: 0;
-        right: 0;
-        width: 100%;
-        text-align: center;
-        /* Center focus */
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        padding: 0 10px;
-        pointer-events: none;
-        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
-        z-index: 10;
-    }
-
-    /* Footer adjustments */
-
-    /* Footer adjustments */
-    footer {
-        bottom: 10px;
-        width: 70%;
-        /* Give space for Home button */
-        text-align: left;
-        left: 20px;
+        max-width: calc(100% - 32px);
+        font-size: 1.3em;
     }
 
     footer h2 {
@@ -839,23 +822,14 @@ button {
     right: 20px;
 }
 
-/* Footer */
-/* Footer */
-footer {
-    position: fixed;
-    bottom: 20px;
-    left: 0;
-    width: 100%;
+#gallery-footer {
+    min-width: 0;
     text-align: center;
-    z-index: 15;
-    pointer-events: none;
+    overflow-wrap: anywhere;
 }
 
 #gallery-2d #gallery-footer {
-    position: static;
     grid-column: 1 / -1;
-    width: auto;
-    text-align: center;
 }
 
 #set-grid {
@@ -871,7 +845,6 @@ footer {
 footer h2 {
     font-size: 0.9em;
     opacity: 0.5;
-    pointer-events: auto;
     display: inline-block;
 }
 
@@ -1155,4 +1128,14 @@ input[type="range"]::-webkit-slider-thumb:hover {
     width: 100%;
     border: none;
     background: #000;
+}
+
+@media (max-height: 450px) {
+    #thumbnail-selector {
+        height: 56px;
+    }
+
+    #thumbnail-selector .thumb-small {
+        height: 42px;
+    }
 }

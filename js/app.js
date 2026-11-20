@@ -696,7 +696,7 @@ class App {
             this.sphereHintTimer = setTimeout(() => { this.ui.sphereHint.hidden = true; }, 5000);
         }
 
-        const footerParent = newMode === '2D' ? this.ui.grid : document.getElementById('ui-layer');
+        const footerParent = newMode === '2D' ? this.ui.grid : document.getElementById('gallery-dock');
         footerParent.append(this.ui.footer);
 
         if (newMode === '3D') {
@@ -1004,13 +1004,10 @@ class App {
     }
 
     toggleMetadata() {
-        if (this.ui.metadataViewer.classList.contains('hidden')) {
-            this.ui.metadataViewer.classList.remove('hidden');
-            this.ui.metadataViewer.classList.add('visible');
-        } else {
-            this.ui.metadataViewer.classList.add('hidden');
-            this.ui.metadataViewer.classList.remove('visible');
-        }
+        if (this.ui.imageViewer.hidden) return;
+        const isVisible = this.ui.metadataViewer.classList.toggle('visible');
+        this.ui.metadataViewer.classList.toggle('hidden', !isVisible);
+        this.ui.toggleMetadata.setAttribute('aria-expanded', String(isVisible));
     }
 
     activateImmersiveViewer(index) {
@@ -1018,7 +1015,7 @@ class App {
         if (!iframe) return;
 
         // Ensure Metadata Panel is hidden
-        if (this.ui.metadataViewer) this.ui.metadataViewer.classList.remove('visible');
+        if (this.ui.metadataViewer.classList.contains('visible')) this.toggleMetadata();
 
         // Show Iframe Container
         iframe.classList.remove('hidden');
@@ -1721,7 +1718,9 @@ class App {
         }
 
         // 3. Close Metadata, Thumbs & Arrows
-        if (this.ui.metadataViewer) this.ui.metadataViewer.classList.remove('visible');
+        this.ui.metadataViewer.classList.remove('visible');
+        this.ui.metadataViewer.classList.add('hidden');
+        this.ui.toggleMetadata.setAttribute('aria-expanded', 'false');
         const thumbs = document.getElementById('thumbnail-selector');
         if (thumbs) thumbs.classList.add('hidden');
         if (this.ui.leftArrow) this.ui.leftArrow.hidden = true;

@@ -1,7 +1,7 @@
 import { resolveShape, shapePositions } from './shapes.js';
 
-// Three.js is loaded globally via CDN
-const THREE = window.THREE;
+// Three.js is loaded when the sphere is requested.
+let THREE;
 
 export class View3D {
     constructor(container) {
@@ -11,6 +11,8 @@ export class View3D {
         this.renderer = null;
         this.pivot = null;
         this.frames = [];
+        this.textureQueue = [];
+        this.activeTextureLoads = 0;
         this.images = [];
 
         // Config
@@ -25,7 +27,7 @@ export class View3D {
         this.isTransitioning = false; // Flag to disable physics during GSAP anims
 
         // Time & Stats
-        this.clock = new THREE.Clock();
+        this.clock = null;
         this.frameCount = 0;
         this.lastTime = 0;
         this.fpsElement = document.getElementById('fps-counter');
@@ -42,10 +44,8 @@ export class View3D {
 
     init(images, onSelect, onPreload, isMobile = false, isDebug = false, onMagnify = null) {
         this.onMagnify = onMagnify;
-        if (!THREE) {
-            console.error("Three.js not loaded");
-            return;
-        }
+        THREE = window.THREE;
+        this.clock = new THREE.Clock();
 
         this.images = images;
         this.onSelect = onSelect;
@@ -57,11 +57,16 @@ export class View3D {
 
         // 1. SETUP RENDERER
         if (!this.renderer) {
-            this.renderer = new THREE.WebGLRenderer({
-                alpha: true,
-                antialias: true,
-                powerPreference: "high-performance"
-            });
+            try {
+                this.renderer = new THREE.WebGLRenderer({
+                    alpha: true,
+                    antialias: !isMobile
+                });
+            } catch (cause) {
+                const error = new Error('Could not create a WebGL renderer', { cause });
+                error.name = 'WebGLUnavailableError';
+                throw error;
+            }
             this.renderer.outputEncoding = THREE.sRGBEncoding;
             this.renderer.toneMapping = THREE.NoToneMapping;
             this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -93,17 +98,14 @@ export class View3D {
         if (this.shapeEmoji && !this.shapeButton) {
             const button = document.createElement('button');
             button.type = 'button';
-            button.style.cssText = 'position:absolute;bottom:85px;left:16px;z-index:100;padding:12px 16px;min-height:44px;background:#161616;color:white;border:1px solid #888;border-radius:24px;cursor:pointer';
-            button.addEventListener('pointerdown', event => event.stopPropagation());
-            button.addEventListener('mousedown', event => event.stopPropagation());
-            button.addEventListener('touchstart', event => event.stopPropagation());
+            button.id = 'shape-toggle';
             button.addEventListener('click', event => {
                 event.stopPropagation();
                 if (this.layout === 'LINE') return;
                 this.useShape = !this.useShape;
                 this.applyArrangement(true);
             });
-            this.container.appendChild(button);
+            document.getElementById('gallery-dock').prepend(button);
             this.shapeButton = button;
             this.updateShapeButton();
         }
@@ -180,26 +182,38 @@ export class View3D {
             this.pivot.add(mesh);
             this.frames.push(mesh);
 
-            // Lazy Load Texture
-            const imgName = this.images[i];
-            new THREE.TextureLoader().load(`./thumbs/${imgName}.jpg`, (tex) => {
-                tex.encoding = THREE.sRGBEncoding;
-                tex.minFilter = THREE.LinearFilter;
+            this.textureQueue.push({ mesh, image: this.images[i] });
+        }
+        this.loadQueuedTextures();
+    }
 
-                // Adjust scale for aspect ratio
-                // We want a fixed height (Reference height 5 is good for visibility)
-                // User Request 3: Larger icons on mobile
-                const REF_HEIGHT = this.isMobile ? 8 : 5;
-                const aspect = tex.image.width / tex.image.height;
+    loadQueuedTextures() {
+        while (this.activeTextureLoads < 3 && this.textureQueue.length) {
+            const { mesh, image } = this.textureQueue.shift();
+            if (mesh.parent !== this.pivot) continue;
 
-                // Cap panoramic width so adjacent frames remain selectable.
-                const fit = this.shapeEmoji ? Math.min(1, 9 / (REF_HEIGHT * aspect)) : 1;
-                mesh.scale.set(REF_HEIGHT * aspect * fit, REF_HEIGHT * fit, 1);
+            this.activeTextureLoads++;
+            const finish = () => {
+                this.activeTextureLoads--;
+                this.loadQueuedTextures();
+            };
 
-                material.map = tex;
-                material.color.setHex(0xffffff); // Reset color to white once loaded
-                material.needsUpdate = true;
-            });
+            new THREE.TextureLoader().load(`./thumbs/${image}.jpg`, (texture) => {
+                if (mesh.parent === this.pivot) {
+                    texture.encoding = THREE.sRGBEncoding;
+                    texture.minFilter = THREE.LinearFilter;
+                    const height = this.isMobile ? 8 : 5;
+                    const aspect = texture.image.width / texture.image.height;
+                    // Keep panoramic frames from covering nearby photos in emoji layouts.
+                    const fit = this.shapeEmoji ? Math.min(1, 9 / (height * aspect)) : 1;
+                    mesh.scale.set(height * aspect * fit, height * fit, 1);
+                    mesh.material.map = texture;
+                    mesh.material.needsUpdate = true;
+                } else {
+                    texture.dispose();
+                }
+                finish();
+            }, undefined, finish);
         }
     }
 
@@ -207,7 +221,7 @@ export class View3D {
         if (!this.shapeButton) return;
         this.shapeButton.textContent = this.useShape ? 'View Sphere' : `View ${this.shapeEmoji} Shape`;
         this.shapeButton.setAttribute('aria-label', this.shapeButton.textContent);
-        this.shapeButton.hidden = this.layout === 'LINE';
+        this.shapeButton.hidden = this.layout === 'LINE' || this.container.style.display === 'none';
     }
 
     applyArrangement(animate = false) {
@@ -704,6 +718,7 @@ export class View3D {
                     }
                 });
                 this.frames = [];
+                this.textureQueue = [];
                 this.createFrames();
                 if (this.layout === 'LINE') this.enterLineView(this.currentIndex);
             }
@@ -731,8 +746,12 @@ export class View3D {
 
     show() {
         this.container.style.display = 'block';
+        this.updateShapeButton();
         this.resize();
         this.resumeRendering();
     }
-    hide() { this.container.style.display = 'none'; }
+    hide() {
+        this.container.style.display = 'none';
+        this.updateShapeButton();
+    }
 }

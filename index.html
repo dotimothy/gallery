@@ -4,17 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gallery Template</title>
+    <title>Gallery</title>
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📷</text></svg>">
-    <link href='https://fonts.googleapis.com/css?family=Roboto:300,400,900' rel='stylesheet' type='text/css'>
-
-    <!-- External Libs -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-
     <!-- App CSS -->
-    <link rel="stylesheet" href="css/style.css?v=2">
+    <link rel="stylesheet" href="css/style.css?v=5">
 </head>
 
 <body>
@@ -24,39 +18,32 @@
         <!-- Loading Screen -->
         <div id="loading-screen">
             <div class="spinner"></div>
-            <div id="loading-text" aria-live="polite" aria-atomic="true">Loading Gallery... 0%</div>
-            <div id="loading-bar-container">
-                <div id="loading-bar"></div>
-            </div>
-            <div id="loading-stats" style="margin-top: 10px; color: #888; font-size: 0.9em; text-align: center;">
-                <div id="loading-file">Initializing...</div>
-                <div>
-                    <span id="loading-data">0.00 MB</span> |
-                    <span id="loading-speed">0 KB/s</span>
-                </div>
-            </div>
+            <div id="loading-text" role="status">Loading gallery…</div>
         </div>
 
-        <h1 id="title"></h1>
-        <div id="fps-counter"
+        <h1 id="title">Gallery</h1>
+        <div id="fps-counter" hidden
             style="position: fixed; top: 10px; left: 10px; font-size: 0.8em; opacity: 0.7; z-index: 100; font-family: monospace;">
             FPS: 60</div>
 
 
-        <!-- Toggle Switch -->
-        <!-- Toggle Switch & Controls -->
         <div id="controls-container">
-            <button id="controls-toggle" title="Menu" aria-label="Toggle Menu" aria-expanded="false">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-menu">
-                    <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round" />
-                </svg>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-close hidden">
-                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round" />
-                </svg>
-            </button>
-
+            <div class="gallery-toolbar">
+                <div id="layout-switch" role="group" aria-label="Gallery layout">
+                    <button type="button" data-layout="2D" aria-pressed="false">Grid</button>
+                    <button type="button" data-layout="3D" aria-pressed="true">3D</button>
+                </div>
+                <button id="controls-toggle" title="Menu" aria-label="Toggle Menu" aria-expanded="false">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-menu">
+                        <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-close hidden">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </button>
+            </div>
             <div id="controls-list">
                 <button id="refresh" title="Reload Gallery" aria-label="Reload gallery">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -83,7 +70,6 @@
                             d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
                     </svg>
                 </button>
-                <button id="mode-toggle" class="text-btn" aria-label="Switch to 2D layout">3D</button>
             </div>
         </div>
 
@@ -136,8 +122,19 @@
                     <h3>2D Layout</h3>
                     <label>
                         <span>Images per Row</span>
-                        <input type="range" id="set-grid" min="1" max="10" step="1" value="4">
-                        <span class="val-display" id="disp-grid">4</span>
+                        <select id="set-grid">
+                            <option value="auto">Auto</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                            <option value="7">7</option>
+                            <option value="8">8</option>
+                            <option value="9">9</option>
+                            <option value="10">10</option>
+                        </select>
                     </label>
                 </div>
 
@@ -147,12 +144,14 @@
             </div>
         </div>
 
-        <!-- Home / Footer -->
-        <footer id="gallery-footer">
-            <h2>© <a href="https://timothydo.me/photography" target="_blank">TheDoShoots</a> 2026. By Timothy Do. <a
-                    href="#" id="openLicense">All Rights Reserved</a>. <a href="https://github.com/dotimothy/gallery"
-                    target="_blank">GitHub</a>.</h2>
-        </footer>
+        <div id="gallery-dock">
+            <p id="sphere-hint" role="status" hidden></p>
+            <footer id="gallery-footer">
+                <h2>© <a href="https://timothydo.me/photography" target="_blank">TheDoShoots</a> 2026. By Timothy Do. <a
+                        href="#" id="openLicense">All Rights Reserved</a>. <a href="https://github.com/dotimothy/gallery"
+                        target="_blank">GitHub</a>.</h2>
+            </footer>
+        </div>
     </div>
 
     <!-- Navigation Hints / Arrows (Moved to root to ensure correct Z-Index stacking over viewer) -->
@@ -170,22 +169,31 @@
         <!-- Controls Container -->
         <!-- Controls Container -->
         <div id="viewer-controls-container">
-            <button id="viewer-controls-toggle" title="Viewer Menu" aria-label="Toggle Viewer Menu" aria-expanded="false">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-menu">
-                    <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round" />
-                </svg>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-close hidden">
-                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round" />
-                </svg>
-            </button>
-            <div id="viewer-controls-list">
+            <div class="gallery-toolbar">
                 <button id="exitViewer" title="Close Viewer" aria-label="Close viewer">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 6L6 18M6 6L18 18" />
                     </svg>
                 </button>
+                <button id="toggleMetadata" title="Info" aria-label="Toggle image info" aria-controls="metadataViewer" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <circle cx="12" cy="8" r="2" fill="currentColor" stroke="none"></circle>
+                    </svg>
+                </button>
+                <button id="viewer-controls-toggle" title="Viewer Menu" aria-label="Toggle Viewer Menu" aria-expanded="false">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-menu">
+                        <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="icon-close hidden">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </button>
+            </div>
+            <div id="viewer-controls-list">
                 <button id="fullscreenToggle" title="Fullscreen" aria-label="Toggle fullscreen">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path
@@ -203,13 +211,6 @@
                     <svg class="icon-back hidden" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2">
                         <path d="M19 12H5M12 19l-7-7 7-7" />
-                    </svg>
-                </button>
-                <button id="toggleMetadata" title="Info" aria-label="Toggle image info">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="16" x2="12" y2="12"></line>
-                        <circle cx="12" cy="8" r="2" fill="currentColor" stroke="none"></circle>
                     </svg>
                 </button>
                 <button id="viewer-slideshow" title="Toggle Slideshow" aria-label="Toggle slideshow">
@@ -235,15 +236,14 @@
         </div>
 
         <div id="full-image-container"></div>
-        <div id="thumbnail-selector" class="visible"></div>
-
-        <div id="image-counter" aria-live="polite" aria-atomic="true"></div>
-        <div id="viewer-exif-strip" aria-hidden="true"></div>
-        <div id="viewer-hint" aria-hidden="true">&#8592; &#8594; navigate &nbsp;&middot;&nbsp; Esc close &nbsp;&middot;&nbsp; i info</div>
+        <div id="viewer-dock">
+            <div id="metadataViewer" class="hidden"></div>
+            <div id="viewer-exif-strip" aria-hidden="true"></div>
+            <div id="image-counter" aria-live="polite" aria-atomic="true"></div>
+            <div id="thumbnail-selector" class="hidden"></div>
+        </div>
+        <div id="viewer-hint" aria-hidden="true"></div>
     </div>
-
-    <!-- Metadata Overlay (Moved to root for correct Z-index) -->
-    <div id="metadataViewer" class="hidden"></div>
 
     <!-- Immersive Frame (Independent Viewer) -->
     <iframe id="immersive-frame" class="hidden" src="about:blank"></iframe>
@@ -268,7 +268,7 @@
     </div>
 
     <!-- App JS -->
-    <script type="module" src="js/app.js?v=2"></script>
+    <script type="module" src="js/app.js?v=9"></script>
 </body>
 
 </html>

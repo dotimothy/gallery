@@ -67,11 +67,7 @@ button {
 /* Previous definitions removed in favor of Unified Viewer Controls */
 
 #thumbnail-selector {
-    opacity: 0;
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
+    min-width: 0;
     height: 80px;
     background: rgba(0, 0, 0, 0.8);
     display: flex;
@@ -79,12 +75,7 @@ button {
     overflow-x: auto;
     padding: 5px;
     box-sizing: border-box;
-    transition: transform 0.3s ease;
-    z-index: 240;
-}
-
-#thumbnail-selector.hidden {
-    transform: translateY(100%);
+    pointer-events: auto;
 }
 
 #thumbnail-selector .thumb-small {
@@ -108,8 +99,7 @@ button {
 }
 
 #ui-layer button,
-#ui-layer a,
-#ui-layer h1 {
+#ui-layer a {
     pointer-events: auto;
     /* Re-enable clicks for controls */
 }
@@ -117,9 +107,14 @@ button {
 /* Title */
 #title {
     position: absolute;
-    top: 20px;
-    width: 100%;
+    top: max(20px, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100% - 380px);
     text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 2em;
     /* Adjusted roughly from 3em to fit better */
     font-weight: 900;
@@ -187,6 +182,7 @@ button {
     align-items: flex-end;
     overflow: hidden;
     height: 0;
+    visibility: hidden;
     opacity: 0;
     transform: translateY(-10px);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -200,6 +196,7 @@ button {
        Actually, height:auto usually doesn't animate. Let's use opacity and transform primarily, and max-height. */
     height: auto;
     max-height: 300px;
+    visibility: visible;
     opacity: 1;
     transform: translateY(0);
     pointer-events: auto;
@@ -208,8 +205,9 @@ button {
 }
 
 #controls-list button {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
     border-radius: 20px;
     background: rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.15);
@@ -227,18 +225,87 @@ button {
     transform: translateX(-2px);
 }
 
-/* Text buttons like "3D" */
-#controls-list button.text-btn {
-    width: auto;
+.gallery-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#layout-switch {
+    display: flex;
+    padding: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 24px;
+    background: rgba(0, 0, 0, 0.75);
+}
+
+#layout-switch button {
+    min-width: 48px;
+    min-height: 44px;
     padding: 0 12px;
+    border: 0;
+    border-radius: 22px;
+    background: transparent;
+    color: white;
+    font: inherit;
     font-weight: 700;
-    font-size: 0.9em;
+    cursor: pointer;
+}
+
+#layout-switch button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+#layout-switch button[aria-pressed="true"] {
+    background: white;
+    color: #111;
+}
+
+.gallery-toolbar button:focus-visible {
+    outline: 2px solid #78bdff;
+    outline-offset: 2px;
+}
+
+#gallery-dock {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    padding: 0 max(16px, env(safe-area-inset-right))
+        max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+
+body:has(#imageViewer.visible) #gallery-dock,
+body:has(#immersive-frame:not(.hidden)) #gallery-dock {
+    visibility: hidden;
+}
+
+#shape-toggle {
+    padding: 0 16px;
+    min-height: 44px;
+    background: #161616;
+    border: 1px solid #888;
+    border-radius: 24px;
+}
+
+#sphere-hint {
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 8px 14px;
+    border-radius: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    text-align: center;
 }
 
 /* Mobile Adjustments for Controls */
 @media (max-width: 768px) {
     #controls-container {
-        top: max(15px, env(safe-area-inset-top));
+        top: calc(56px + env(safe-area-inset-top));
         right: max(15px, env(safe-area-inset-right));
     }
 
@@ -254,9 +321,6 @@ button {
         border-radius: 22px;
     }
 
-    #controls-list button.text-btn {
-        min-width: 44px;
-    }
 }
 
 /* Layout Containers */
@@ -267,7 +331,6 @@ button {
     width: 100%;
     height: 100%;
     z-index: 1;
-    opacity: 0;
     cursor: grab;
 }
 
@@ -281,17 +344,18 @@ button {
 }
 
 #gallery-2d {
+    --auto-columns: 5;
     position: fixed;
-    top: 0;
+    top: calc(86px + env(safe-area-inset-top));
+    bottom: 0;
     left: 0;
     width: 100%;
-    height: 100%;
     z-index: 5;
     display: grid;
-    grid-template-columns: repeat(var(--col-count, 4), 1fr);
+    grid-template-columns: repeat(var(--col-count, var(--auto-columns)), minmax(0, 1fr));
     grid-auto-rows: min-content;
     gap: 15px;
-    padding: 100px 30px 30px 30px;
+    padding: 14px 30px 30px;
     box-sizing: border-box;
     overflow-y: auto;
     overflow-x: hidden;
@@ -306,6 +370,18 @@ button {
 #gallery-2d.active {
     opacity: 1;
     pointer-events: auto;
+}
+
+@media (max-width: 1024px) {
+    #gallery-2d { --auto-columns: 3; }
+}
+
+@media (max-width: 600px) {
+    #gallery-2d {
+        --auto-columns: 2;
+        gap: 12px;
+        padding-inline: 15px;
+    }
 }
 
 /* 2D Thumbs */
@@ -358,14 +434,19 @@ button {
     height: 100%;
     background: rgba(0, 0, 0, 0.95);
     z-index: 600;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    display: grid;
+    grid-template: minmax(0, 1fr) auto / minmax(0, 1fr);
+    box-sizing: border-box;
+    padding-top: calc(74px + env(safe-area-inset-top));
 
     /* Animation */
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+#imageViewer[hidden] {
+    display: none;
 }
 
 #imageViewer.visible {
@@ -395,8 +476,10 @@ button {
 }
 
 #full-image-container {
-    width: 100%;
-    height: 100%;
+    grid-row: 1;
+    position: relative;
+    min-height: 0;
+    min-width: 0;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -424,34 +507,33 @@ button {
     /* No interaction lag during drag */
 }
 
-/* Viewer counter, EXIF strip, keyboard hint */
-#image-counter {
-    position: absolute;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: rgba(255, 255, 255, 0.55);
-    font-size: 0.75rem;
-    font-family: 'Roboto', sans-serif;
-    font-weight: 300;
-    letter-spacing: 0.12em;
+#imageViewer #viewer-dock {
+    grid-row: 2;
+    display: grid;
+    min-width: 0;
+    gap: 6px;
+    padding-bottom: env(safe-area-inset-bottom);
     pointer-events: none;
-    user-select: none;
-    z-index: 10;
-    white-space: nowrap;
+}
+
+#image-counter {
+    justify-self: center;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    padding: 2px 8px;
 }
 
 #viewer-exif-strip {
-    position: absolute;
-    bottom: 48px;
-    left: 50%;
-    transform: translateX(-50%);
     display: flex;
-    gap: 12px;
-    pointer-events: none;
-    user-select: none;
-    z-index: 10;
-    white-space: nowrap;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 8px;
+    padding-inline: 12px;
+}
+
+#viewer-exif-strip:empty {
+    display: none;
 }
 
 #viewer-exif-strip span {
@@ -467,18 +549,22 @@ button {
 
 #viewer-hint {
     position: absolute;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: rgba(255, 255, 255, 0.3);
-    font-size: 0.65rem;
+    top: max(20px, env(safe-area-inset-top));
+    left: max(12px, env(safe-area-inset-left));
+    max-width: calc(100% - 202px);
+    box-sizing: border-box;
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(0, 0, 0, 0.75);
+    border-radius: 12px;
+    padding: 4px 8px;
+    font-size: 0.75rem;
     font-family: 'Roboto', sans-serif;
     font-weight: 300;
     letter-spacing: 0.1em;
     pointer-events: none;
     user-select: none;
     z-index: 10;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
     transition: opacity 1s ease;
 }
 
@@ -508,26 +594,13 @@ button {
     }
 }
 
-/* Metadata Overlay (Shared) */
 #metadataViewer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    background: linear-gradient(to top, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0));
-    padding: 20px;
-    padding-bottom: 40px;
-    box-sizing: border-box;
-    pointer-events: none;
-    transition: opacity 0.3s, transform 0.3s;
-    z-index: 700;
+    max-height: min(28dvh, 13rem);
+    overflow: auto;
+    overflow-wrap: anywhere;
+    background: #111;
+    padding: 12px 16px;
     text-align: left;
-    transform: translateY(100%);
-    /* Hidden by default */
-}
-
-#metadataViewer.visible {
-    transform: translateY(0);
     pointer-events: auto;
 }
 
@@ -557,7 +630,7 @@ button {
     /* Higher than main controls */
 }
 
-#viewer-controls-toggle {
+#viewer-controls-container .gallery-toolbar button {
     width: 48px;
     height: 48px;
     border-radius: 24px;
@@ -567,13 +640,13 @@ button {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: background 0.3s, border-color 0.3s, transform 0.3s;
     backdrop-filter: blur(5px);
     z-index: 221;
     color: white;
 }
 
-#viewer-controls-toggle:hover {
+#viewer-controls-container .gallery-toolbar button:hover {
     background: rgba(50, 50, 50, 0.8);
     border-color: rgba(255, 255, 255, 0.5);
     transform: scale(1.05);
@@ -595,6 +668,7 @@ button {
     align-items: flex-end;
     overflow: hidden;
     height: 0;
+    visibility: hidden;
     opacity: 0;
     transform: translateY(-10px);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -604,6 +678,7 @@ button {
 #viewer-controls-container.expanded #viewer-controls-list {
     height: auto;
     max-height: 400px;
+    visibility: visible;
     /* Taller list */
     opacity: 1;
     transform: translateY(0);
@@ -612,8 +687,9 @@ button {
 }
 
 #viewer-controls-list button {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
     border-radius: 20px;
     background: rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.15);
@@ -642,35 +718,28 @@ button {
 /* Mobile Enhancements for Viewer */
 @media (max-width: 768px) {
     #viewer-controls-container {
-        top: 10px;
-        right: 10px;
+        top: max(10px, env(safe-area-inset-top));
+        right: max(10px, env(safe-area-inset-right));
         gap: 10px;
     }
 
-    #viewer-controls-toggle {
+    #viewer-controls-container .gallery-toolbar button {
         width: 44px;
         height: 44px;
     }
 
-    #viewer-controls-list button {
-        width: 44px;
-        /* Larger touch target relative to screen */
-        height: 44px;
+    #imageViewer {
+        padding-top: calc(64px + env(safe-area-inset-top));
+    }
+
+    #viewer-hint {
+        top: max(10px, env(safe-area-inset-top));
+        max-width: calc(100% - 186px - env(safe-area-inset-left) - env(safe-area-inset-right));
     }
 }
 
 /* Mobile Enhancements */
 @media (max-width: 768px) {
-
-    /* Force visible if users want to see performance */
-    #fps-counter {
-        display: block !important;
-        background: rgba(0, 0, 0, 0.5);
-        padding: 4px 8px;
-        border-radius: 4px;
-        top: max(10px, env(safe-area-inset-top));
-        left: 10px;
-    }
 
     /* Hide Nav Arrows on mobile (Swipe is primary) */
     .nav-arrow {
@@ -678,43 +747,14 @@ button {
     }
 
     #gallery-2d {
-        padding-top: 150px;
-        /* Increased to accommodate Title + Centered Controls */
-    }
-
-    #gallery-2d {
-        padding-top: 150px;
-        /* Increased to accommodate Title + Centered Controls */
+        top: calc(108px + env(safe-area-inset-top));
+        padding-top: 12px;
     }
 
     #title {
-        font-size: 1.3em;
-        /* Slightly larger for a clear header */
         top: max(15px, env(safe-area-inset-top));
-        /* The very top */
-        left: 0;
-        right: 0;
-        width: 100%;
-        text-align: center;
-        /* Center focus */
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        padding: 0 10px;
-        pointer-events: none;
-        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
-        z-index: 10;
-    }
-
-    /* Footer adjustments */
-
-    /* Footer adjustments */
-    footer {
-        bottom: 10px;
-        width: 70%;
-        /* Give space for Home button */
-        text-align: left;
-        left: 20px;
+        max-width: calc(100% - 32px);
+        font-size: 1.3em;
     }
 
     footer h2 {
@@ -791,30 +831,29 @@ button {
     right: 20px;
 }
 
-/* Footer */
-footer {
-    position: fixed;
-    bottom: 20px;
-    left: 0;
-    width: 100%;
+#gallery-footer {
+    min-width: 0;
     text-align: center;
-    z-index: 15;
-    pointer-events: none;
-    transition: opacity 0.4s ease, visibility 0.4s ease;
+    overflow-wrap: anywhere;
 }
 
-footer.hidden,
-body:has(#imageViewer.visible) footer,
-body:has(#immersive-frame:not(.hidden)) footer {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
+#gallery-2d #gallery-footer {
+    grid-column: 1 / -1;
+}
+
+#set-grid {
+    min-height: 44px;
+    padding: 0 10px;
+    border: 1px solid #777;
+    border-radius: 6px;
+    background: #222;
+    color: white;
+    font: inherit;
 }
 
 footer h2 {
     font-size: 0.9em;
     opacity: 0.5;
-    pointer-events: auto;
     display: inline-block;
 }
 
@@ -853,22 +892,6 @@ footer a {
     font-size: 1.2em;
     letter-spacing: 1px;
     color: #888;
-}
-
-#loading-bar-container {
-    width: 300px;
-    height: 4px;
-    background: #333;
-    margin-top: 20px;
-    border-radius: 2px;
-    overflow: hidden;
-}
-
-#loading-bar {
-    width: 0%;
-    height: 100%;
-    background: white;
-    transition: width 0.1s linear;
 }
 
 .spinner {
@@ -1114,4 +1137,14 @@ input[type="range"]::-webkit-slider-thumb:hover {
     width: 100%;
     border: none;
     background: #000;
+}
+
+@media (max-height: 450px) {
+    #thumbnail-selector {
+        height: 56px;
+    }
+
+    #thumbnail-selector .thumb-small {
+        height: 42px;
+    }
 }

@@ -1,5 +1,5 @@
 
-import { View3D } from './view3d.js';
+import { View3D } from './view3d.js?v=6';
 import { View2D } from './view2d.js';
 import { SettingsManager } from './settings.js';
 import { ViewStateManager } from './ViewStateManager.js';
@@ -7,14 +7,16 @@ import { TouchManager } from './TouchManager.js';
 
 class App {
     constructor() {
-        this.mode = '3D'; // Start in 3D
+        const params = new URLSearchParams(window.location.search);
+        this.mode = params.get('mode') === '2d' || params.has('gallery') ? '2D' : '3D';
         this.currentIndex = 0;
         this.images = [];
         this.metadata = {};
         this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1);
 
         // Debug Flag
-        this.isDebug = new URLSearchParams(window.location.search).has('debug');
+        this.isDebug = params.has('debug');
+        document.getElementById('fps-counter').hidden = !this.isDebug;
 
         // Touch State
         this.touchStartX = 0;
@@ -31,7 +33,10 @@ class App {
         // Elements
         this.ui = {
             title: document.getElementById('title'),
-            toggle: document.getElementById('mode-toggle'),
+            layoutButtons: document.querySelectorAll('#layout-switch button'),
+            sphereHint: document.getElementById('sphere-hint'),
+            footer: document.getElementById('gallery-footer'),
+            grid: document.getElementById('gallery-2d'),
             controlsContainer: document.getElementById('controls-container'), // New
             controlsToggle: document.getElementById('controls-toggle'), // New
 
@@ -58,12 +63,11 @@ class App {
             imageCounter: document.getElementById('image-counter'),
             viewerExifStrip: document.getElementById('viewer-exif-strip'),
             viewerHint: document.getElementById('viewer-hint'),
-            footer: document.getElementById('gallery-footer') || document.querySelector('footer'),
         };
 
         // Initialize Views
         this.view3d = new View3D(document.getElementById('gallery-3d'));
-        this.view2d = new View2D(document.getElementById('gallery-2d'));
+        this.view2d = new View2D(this.ui.grid);
         // (Init called in loadData)
 
         // Settings System
@@ -107,8 +111,15 @@ class App {
             this.ui.imageViewer.hidden = false;
             this.ui.imageViewer.classList.add('visible');
 
-            // Show keyboard hint, then fade out after 4 seconds
+            this.ui.sphereHint.hidden = true;
+            this.ui.controlsContainer.inert = true;
+            if (this.mode === '2D') this.ui.grid.inert = true;
+
+            // Fade the navigation hint after four seconds.
             if (this.ui.viewerHint) {
+                this.ui.viewerHint.textContent = this.isMobile
+                    ? 'Swipe for next or previous photo'
+                    : '← → navigate · Esc close · i info';
                 this.ui.viewerHint.style.opacity = '1';
                 clearTimeout(this._hintTimer);
                 this._hintTimer = setTimeout(() => {
@@ -118,7 +129,7 @@ class App {
 
             // Move keyboard focus into the dialog
             setTimeout(() => {
-                if (this.ui.imageViewer) this.ui.imageViewer.focus();
+                if (!this.ui.imageViewer.hidden) this.ui.imageViewer.focus();
             }, 50);
 
             // 3D Rendering Management:
@@ -233,11 +244,6 @@ class App {
         const urlParams = new URLSearchParams(window.location.search);
         this.useDataSaver = urlParams.has('datasaver');
 
-        // Mode
-        if (urlParams.get('mode') === '2d' || urlParams.has('gallery')) {
-            this.switchMode('2D');
-        }
-
         // Initial Selection (Deep link)
         let initialIndex = 0;
         const targetImg = urlParams.get('img');
@@ -266,95 +272,39 @@ class App {
     }
 
     async loadData() {
+        const controller = new AbortController();
+        const metadataTimeout = setTimeout(() => controller.abort(), 8000);
         try {
-            // 1. Try Loading Metadata
-            const response = await fetch('./metadata/metadata.json');
-            if (!response.ok) throw new Error("Metadata check failed");
-            const data = await response.json();
-
-            // 2. Parse Data
-            this.metadata = data;
-            // image_order contains filenames without extension/path based on viewing file
-            // Actually the file says "image_order": ["0", "1", ...]
-            // And keys are "0", "1".
-            // So we can use image_order directly.
-            this.images = data.image_order || Object.keys(data).filter(k => k !== 'image_order');
-
-            this.log(`Loaded metadata with ${this.images.length} images.`);
-
-            // 3. Preload Thumbnails (Blocking)
-            await this.preloadAllThumbnails();
-
-            // 4. Init 3D View
-            this.view3d.init(
-                this.images,
-                (index, openViewer) => this.selectImage(index, openViewer),
-                (index) => this.preloadHighRes(index),
-                this.isMobile,
-                this.isDebug,
-                () => { if (!this.isSlideshowActive) this.toggleMagnifier(); } // Auto-Magnify Callback
-            );
-
-            // 5. Init 2D View
-            this.view2d.init(this.images, (index) => this.selectImage(index, true), this.metadata); // Original selectImage
-
-            // 6. Apply initial state and URL params
-            this.switchMode(this.mode); // Reset to default first
-            this.handleURLParams();
-            this.typeTitle();
-
-            // 7. Start App - Smooth Transition
-            if (typeof gsap !== 'undefined') {
-                const tl = gsap.timeline({
-                    onComplete: () => {
-                        if (this.ui.loadingScreen) this.ui.loadingScreen.classList.add('hidden');
-                    }
-                });
-
-                // Fade out loading screen with a subtle zoom
-                if (this.ui.loadingScreen) {
-                    tl.to(this.ui.loadingScreen, {
-                        opacity: 0,
-                        scale: 1.05,
-                        duration: 0.6,
-                        ease: "power2.inOut",
-                        pointerEvents: "none"
-                    });
-                }
-
-                // Fade in Gallery & UI Elements (Staggered)
-                const gallery3d = document.getElementById('gallery-3d');
-                const gallery2d = document.getElementById('gallery-2d');
-                const thumbs = document.getElementById('thumbnail-selector');
-                const elementsToFade = [gallery3d, gallery2d, this.ui.title, this.ui.controlsContainer, thumbs].filter(Boolean);
-
-                if (elementsToFade.length > 0) {
-                    tl.fromTo(elementsToFade,
-                        { opacity: 0, y: 10 },
-                        { opacity: 1, y: 0, duration: 0.9, stagger: 0.06, ease: "power2.out" },
-                        "-=0.3"
-                    );
-                }
-            } else {
-                // Fallback
-                if (this.ui.loadingScreen) this.ui.loadingScreen.classList.add('hidden');
-                const gallery3d = document.getElementById('gallery-3d');
-                const gallery2d = document.getElementById('gallery-2d');
-                const thumbs = document.getElementById('thumbnail-selector');
-                const elements = [gallery3d, gallery2d, this.ui.title, this.ui.controlsContainer, thumbs].filter(Boolean);
-                elements.forEach(el => el.style.opacity = '1');
-            }
-
-            // 8. Silent Background Preload
-            this.preloadFullImages();
-
-            // (Previous Init calls moved up)
-
+            const response = await fetch('./metadata/metadata.json', { signal: controller.signal });
+            if (!response.ok) throw new Error(`Metadata request failed (${response.status})`);
+            this.metadata = await response.json();
+            this.images = this.metadata.image_order || Object.keys(this.metadata);
         } catch (error) {
-            if (this.isDebug) console.warn("Metadata load failed, falling back to static list.", error);
-            document.getElementById('loading-text').innerText = "Error loading gallery."; // Original error message
+            this.log('Metadata unavailable, using the static image list.', error);
             this.useStaticFallback();
-            // Re-init views with fallback data
+        } finally {
+            clearTimeout(metadataTimeout);
+        }
+
+        // Each view loads thumbnails as it renders. Browsing can start while they arrive.
+        this.view2d.init(this.images, (index) => this.selectImage(index, true), this.metadata, this.isDebug);
+        if (this.mode === '3D' && !await this.initializeSphere()) this.mode = '2D';
+        this.switchMode(this.mode);
+        this.handleURLParams();
+        this.ui.loadingScreen.classList.add('hidden');
+        this.preloadFullImages();
+    }
+
+    async initializeSphere() {
+        if (this.sphereReady) return true;
+
+        const button = this.ui.layoutButtons[1];
+        button.disabled = true;
+        try {
+            await Promise.all([
+                this.loadSphereScript('./js/vendor/three-r128.min.js', 'THREE'),
+                this.loadSphereScript('./js/vendor/gsap-3.12.2.min.js', 'gsap')
+            ]);
             this.view3d.init(
                 this.images,
                 (index, openViewer) => this.selectImage(index, openViewer),
@@ -363,12 +313,43 @@ class App {
                 this.isDebug,
                 () => { if (!this.isSlideshowActive) this.toggleMagnifier(); }
             );
-            this.view2d.init(this.images, (index) => this.selectImage(index, true), {}, this.isDebug);
-
-            this.switchMode(this.mode); // Initial State
-            this.handleURLParams();
-            this.typeTitle();
+            this.sphereReady = true;
+            button.removeAttribute('title');
+            return true;
+        } catch (error) {
+            this.log('3D view unavailable, showing the grid.', error);
+            button.title = '3D could not load. Select 3D to try again.';
+            this.ui.sphereHint.hidden = false;
+            this.ui.sphereHint.textContent = error.name === 'WebGLUnavailableError'
+                ? 'This browser could not start WebGL. You can browse in Grid.'
+                : '3D could not load. You can browse in Grid.';
+            clearTimeout(this.sphereHintTimer);
+            this.sphereHintTimer = setTimeout(() => { this.ui.sphereHint.hidden = true; }, 5000);
+            return false;
+        } finally {
+            button.disabled = false;
         }
+    }
+
+    loadSphereScript(url, globalName) {
+        if (window[globalName]) return Promise.resolve();
+
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            const finish = () => {
+                clearTimeout(timeout);
+                script.onload = null;
+                script.onerror = null;
+                script.remove();
+                if (window[globalName]) resolve();
+                else reject(new Error(`Could not load ${globalName}`));
+            };
+            const timeout = setTimeout(finish, 4000);
+            script.onload = finish;
+            script.onerror = finish;
+            script.src = url;
+            document.head.append(script);
+        });
     }
 
     applySetting(key, value) {
@@ -393,7 +374,6 @@ class App {
             'resolution': { id: 'disp-resolution', suffix: 'x' },
             'sphereSpacing': { id: 'disp-sphere', suffix: '' },
             'particleCount': { id: 'disp-particles', suffix: '' },
-            'gridColumns': { id: 'disp-grid', suffix: '' },
             'slideshowInterval': { id: 'disp-interval', suffix: 's' },
             'sensitivity': { id: 'disp-sensitivity', suffix: 'x' }
         };
@@ -410,92 +390,6 @@ class App {
         // Sync all settings from manager to views
         const keys = ['resolution', 'sphereSpacing', 'particleCount', 'gridColumns', 'slideshowInterval', 'sensitivity'];
         keys.forEach(k => this.applySetting(k, this.settings.get(k)));
-    }
-
-    preloadAllThumbnails() {
-        return new Promise((resolve) => {
-            const total = this.images.length;
-            const text = document.getElementById('loading-text');
-            const bar = document.getElementById('loading-bar');
-
-            // Stats Elements
-            const elFile = document.getElementById('loading-file');
-            const elData = document.getElementById('loading-data');
-            const elSpeed = document.getElementById('loading-speed');
-
-            if (total === 0) {
-                resolve();
-                return;
-            }
-
-            let loadedCount = 0;
-            let totalBytes = 0;
-            const startTime = Date.now();
-            let activeDownloads = 0;
-
-            const updateStats = (fileName = null) => {
-                // Update Progress Bar
-                const percent = Math.round((loadedCount / total) * 100);
-                if (text) text.innerText = `Loading Gallery... ${loadedCount}/${total} (${percent}%)`;
-                if (bar) bar.style.width = `${percent}%`;
-
-                // Update File Name
-                if (fileName && elFile) elFile.innerText = `Downloading: ${fileName}.jpg`;
-
-                // Update Data & Speed
-                if (elData) elData.innerText = `${(totalBytes / (1024 * 1024)).toFixed(2)} MB`;
-
-                const elapsed = (Date.now() - startTime) / 1000; // seconds
-                if (elSpeed && elapsed > 0) {
-                    const bps = totalBytes / elapsed;
-                    // Format Speed
-                    let speedStr = '';
-                    if (bps > 1024 * 1024) speedStr = `${(bps / (1024 * 1024)).toFixed(1)} MB/s`;
-                    else speedStr = `${(bps / 1024).toFixed(1)} KB/s`;
-                    elSpeed.innerText = speedStr;
-                }
-            };
-
-            const loadNext = async (imgName) => {
-                try {
-                    activeDownloads++;
-                    updateStats(imgName);
-
-                    const response = await fetch(`./thumbs/${imgName}.jpg`);
-                    if (!response.ok) throw new Error('Network response was not ok');
-
-                    const reader = response.body.getReader();
-
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        if (value) {
-                            totalBytes += value.length;
-                            updateStats(); // Tick for speed updates
-                        }
-                    }
-
-                    // Success
-                    loadedCount++;
-                } catch (err) {
-                    if (this.isDebug) console.warn("Failed to load thumb:", imgName, err);
-                    loadedCount++; // Count as done to proceed
-                } finally {
-                    activeDownloads--;
-                    updateStats();
-
-                    if (loadedCount >= total) {
-                        if (elFile) elFile.innerText = "Processing...";
-                        resolve();
-                    }
-                }
-            };
-
-            // Launch all (Browser limits concurrency automatically, usually 6)
-            // Or we could batch? Simple loop is mostly fine for <50 items.
-            // But for safety let's just loop.
-            this.images.forEach(img => loadNext(img));
-        });
     }
 
     preloadFullImages() {
@@ -583,10 +477,14 @@ class App {
             };
         }
 
-        this.ui.toggle.onclick = () => {
-            const newMode = this.mode === '3D' ? '2D' : '3D';
-            this.switchMode(newMode);
-        };
+        this.ui.layoutButtons.forEach(button => {
+            button.onclick = async () => {
+                if (!this.images.length || button.dataset.layout === this.mode) return;
+                const layout = button.dataset.layout;
+                if (layout === '3D' && !await this.initializeSphere()) return;
+                if (this.viewState.getState() === 'explore') this.switchMode(layout);
+            };
+        });
         window.addEventListener('resize', () => {
             if (this.mode === '3D') this.view3d.resize();
         });
@@ -728,7 +626,9 @@ class App {
         bindInput('set-resolution', 'resolution', true);
         bindInput('set-sphere', 'sphereSpacing', true);
         bindInput('set-particles', 'particleCount', false);
-        bindInput('set-grid', 'gridColumns', false);
+        document.getElementById('set-grid').onchange = ({ target }) => {
+            this.settings.set('gridColumns', target.value === 'auto' ? 'auto' : Number(target.value));
+        };
         bindInput('set-interval', 'slideshowInterval', true);
         bindInput('set-sensitivity', 'sensitivity', true);
 
@@ -796,10 +696,23 @@ class App {
         this.closeFullscreen();
 
         this.mode = newMode;
-        if (this.ui.toggle) {
-            this.ui.toggle.innerText = newMode === '3D' ? '2D' : '3D';
-            this.ui.toggle.setAttribute('aria-label', newMode === '3D' ? 'Switch to 2D layout' : 'Switch to 3D view');
+        this.ui.layoutButtons.forEach(button => {
+            button.setAttribute('aria-pressed', String(button.dataset.layout === newMode));
+        });
+
+        if (newMode === '3D') this.ui.sphereHint.hidden = true;
+        if (newMode === '3D' && !this.hasShownSphereHint) {
+            this.hasShownSphereHint = true;
+            this.ui.sphereHint.hidden = false;
+            this.ui.sphereHint.textContent = this.isMobile
+                ? 'Drag to rotate · Tap a photo'
+                : 'Drag to Rotate - Click A Photo';
+            clearTimeout(this.sphereHintTimer);
+            this.sphereHintTimer = setTimeout(() => { this.ui.sphereHint.hidden = true; }, 5000);
         }
+
+        const footerParent = newMode === '2D' ? this.ui.grid : document.getElementById('gallery-dock');
+        footerParent.append(this.ui.footer);
 
         if (newMode === '3D') {
             this.view2d.hide();
@@ -809,7 +722,8 @@ class App {
             this.ui.leftArrow.hidden = true;
             this.ui.rightArrow.hidden = true;
         } else {
-            this.view3d.hide(); // This calls pauseRendering() internal to View3D
+            this.view3d.hide();
+            this.view3d.pauseRendering();
             this.view2d.show();
 
             this.ui.leftArrow.hidden = true;
@@ -830,6 +744,9 @@ class App {
             // Wrap-around logic? If jumping from last to first (future feature), handle here.
         }
 
+        if (this.mode === '2D' && openViewer && this.viewState.getState() === 'explore') {
+            this.gridOpener = index;
+        }
         this.currentIndex = index;
 
         // Sync Views
@@ -906,17 +823,6 @@ class App {
         let prevIndex = this.currentIndex - 1;
         if (prevIndex < 0) prevIndex = this.images.length - 1; // Loop to end
         this.selectImage(prevIndex, false, -1);
-    }
-
-    typeTitle() {
-        const titleText = "📷 Gallery Template!!! 📷";
-        let i = 0;
-        this.ui.title.innerText = "";
-        const interval = setInterval(() => {
-            this.ui.title.innerText += titleText.charAt(i);
-            i++;
-            if (i > titleText.length) clearInterval(interval);
-        }, 50);
     }
 
     // --- Slideshow Logic ---
@@ -1113,13 +1019,10 @@ class App {
     }
 
     toggleMetadata() {
-        if (this.ui.metadataViewer.classList.contains('hidden')) {
-            this.ui.metadataViewer.classList.remove('hidden');
-            this.ui.metadataViewer.classList.add('visible');
-        } else {
-            this.ui.metadataViewer.classList.add('hidden');
-            this.ui.metadataViewer.classList.remove('visible');
-        }
+        if (this.ui.imageViewer.hidden) return;
+        const isVisible = this.ui.metadataViewer.classList.toggle('visible');
+        this.ui.metadataViewer.classList.toggle('hidden', !isVisible);
+        this.ui.toggleMetadata.setAttribute('aria-expanded', String(isVisible));
     }
 
     activateImmersiveViewer(index) {
@@ -1127,7 +1030,7 @@ class App {
         if (!iframe) return;
 
         // Ensure Metadata Panel is hidden
-        if (this.ui.metadataViewer) this.ui.metadataViewer.classList.remove('visible');
+        if (this.ui.metadataViewer.classList.contains('visible')) this.toggleMetadata();
 
         // Show Iframe Container
         iframe.classList.remove('hidden');
@@ -1819,6 +1722,7 @@ class App {
         if (this.ui.viewerControlsContainer) {
             this.ui.viewerControlsContainer.classList.remove('expanded');
             if (this.ui.viewerControlsToggle) {
+                this.ui.viewerControlsToggle.setAttribute('aria-expanded', 'false');
                 const iconMenu = this.ui.viewerControlsToggle.querySelector('.icon-menu');
                 const iconClose = this.ui.viewerControlsToggle.querySelector('.icon-close');
                 if (iconMenu) iconMenu.classList.remove('hidden');
@@ -1832,7 +1736,9 @@ class App {
         }
 
         // 3. Close Metadata, Thumbs & Arrows
-        if (this.ui.metadataViewer) this.ui.metadataViewer.classList.remove('visible');
+        this.ui.metadataViewer.classList.remove('visible');
+        this.ui.metadataViewer.classList.add('hidden');
+        this.ui.toggleMetadata.setAttribute('aria-expanded', 'false');
         const thumbs = document.getElementById('thumbnail-selector');
         if (thumbs) thumbs.classList.add('hidden');
         if (this.ui.leftArrow) this.ui.leftArrow.hidden = true;
@@ -1848,20 +1754,28 @@ class App {
             if (g3d) {
                 g3d.style.display = 'block';
                 requestAnimationFrame(() => {
-                    this.view3d.resumeRendering();
+                    if (this.mode === '3D') this.view3d.resumeRendering();
                     // Exit line view to return to sphere
                     this.view3d.exitLineView();
                 });
             }
         } else {
             const g2d = document.getElementById('gallery-2d');
-            if (g2d) g2d.style.display = 'grid';
+            if (g2d) {
+                g2d.style.display = 'grid';
+                g2d.inert = false;
+            }
+            if (currentState === 'preview' && this.gridOpener !== undefined) {
+                this.view2d.focusThumbnail(this.gridOpener);
+            }
+            this.gridOpener = undefined;
         }
 
         // 5. Restore Global UI
         if (this.ui.controlsContainer) {
             // activateImmersiveViewer sets display:none inline; clear it so
             // the controls participate in layout again and can fade in.
+            this.ui.controlsContainer.inert = false;
             this.ui.controlsContainer.style.display = '';
             this.ui.controlsContainer.style.opacity = '1';
             this.ui.controlsContainer.style.pointerEvents = 'auto';

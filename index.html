@@ -20,7 +20,8 @@
             <div class="spinner"></div>
             <div id="gallery-loading">
                 <label for="gallery-progress">Loading Gallery</label>
-                <progress id="gallery-progress"></progress>
+                <progress id="gallery-progress" aria-describedby="gallery-loading-stats"></progress>
+                <div id="gallery-loading-stats"></div>
             </div>
         </div>
 
@@ -271,7 +272,7 @@
     </div>
 
     <!-- App JS -->
-    <script type="module" src="js/app.js?v=10"></script>
+    <script type="module" src="js/app.js?v=11"></script>
 </body>
 
 </html>

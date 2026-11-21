@@ -5,8 +5,9 @@ export class View2D {
         this.onSelect = null;
     }
 
-    init(images, onSelect, metadata = {}, isDebug = false) {
+    init(images, onSelect, metadata = {}, isDebug = false, onThumbnailSettled = null) {
         this.isDebug = isDebug;
+        this.onThumbnailSettled = onThumbnailSettled;
         if (this.isDebug) console.log(`[View2D] Init: ${images.length} images`);
         this.images = images;
         this.onSelect = onSelect;
@@ -47,6 +48,7 @@ export class View2D {
             img.alt = altParts.length ? altParts.join(' — ') : `Photo ${index + 1}`;
 
             const revealThumb = () => {
+                this.onThumbnailSettled?.(imgName, true);
                 thumb.classList.add('loaded');
             };
             img.addEventListener('load', revealThumb);
@@ -54,6 +56,7 @@ export class View2D {
             if (img.complete && img.naturalWidth > 0) revealThumb();
 
             img.onerror = () => {
+                this.onThumbnailSettled?.(imgName, false);
                 console.error(`Failed to load thumb: ${img.src}`);
                 thumb.style.backgroundImage = '';
                 thumb.classList.add('loaded');

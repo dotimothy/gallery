@@ -1,6 +1,6 @@
 
-import { View3D } from './view3d.js?v=7';
-import { View2D } from './view2d.js';
+import { View3D } from './view3d.js?v=8';
+import { View2D } from './view2d.js?v=2';
 import { SettingsManager } from './settings.js';
 import { ViewStateManager } from './ViewStateManager.js';
 import { TouchManager } from './TouchManager.js';
@@ -285,14 +285,58 @@ class App {
         }
 
         // Each view loads thumbnails as it renders. Browsing can start while they arrive.
-        this.view2d.init(this.images, (index) => this.selectImage(index, true), this.metadata, this.isDebug);
+        this.trackThumbnailLoading();
+        this.view2d.init(this.images, (index) => this.selectImage(index, true), this.metadata, this.isDebug, this.thumbnailSettled);
         if (this.mode === '3D' && !await this.initializeSphere()) this.mode = '2D';
         this.switchMode(this.mode);
         this.handleURLParams();
         this.ui.galleryDock.prepend(this.ui.loadingIndicator);
-        if (this.mode === '2D') this.ui.loadingIndicator.hidden = true;
         this.ui.loadingScreen.classList.add('hidden');
         this.preloadFullImages();
+    }
+
+    trackThumbnailLoading() {
+        const urls = new Set(this.images.map(name => new URL(`./thumbs/${name}.jpg`, document.baseURI).href));
+        const total = urls.size;
+        const completed = new Set();
+        const failed = new Set();
+        const stats = document.getElementById('gallery-loading-stats');
+        let bytes = 0;
+
+        const update = () => {
+            const count = completed.size;
+            const percent = total ? Math.round(100 * count / total) : 100;
+            this.ui.loadingProgress.max = total || 1;
+            this.ui.loadingProgress.value = total ? count : 1;
+            stats.textContent = `${count} / ${total} Images · ${(bytes / 1e6).toFixed(2)} MB Transferred · ${percent}%`;
+            if (failed.size) stats.textContent += ` · ${failed.size} Failed`;
+        };
+
+        const observer = new PerformanceObserver(list => {
+            for (const entry of list.getEntries()) {
+                if (urls.has(entry.name)) bytes += entry.transferSize || 0;
+            }
+            update();
+        });
+        observer.observe({ entryTypes: ['resource'] });
+
+        this.thumbnailSettled = (name, success) => {
+            if (completed.has(name)) return;
+            completed.add(name);
+            if (!success) failed.add(name);
+            update();
+            if (completed.size === total) {
+                setTimeout(() => {
+                    observer.disconnect();
+                    this.ui.loadingIndicator.hidden = true;
+                }, 1000);
+            }
+        };
+        update();
+        if (!total) {
+            observer.disconnect();
+            this.ui.loadingIndicator.hidden = true;
+        }
     }
 
     async initializeSphere() {
@@ -300,8 +344,6 @@ class App {
 
         const button = this.ui.layoutButtons[1];
         button.disabled = true;
-        this.ui.loadingIndicator.hidden = false;
-        this.ui.loadingProgress.removeAttribute('value');
         try {
             await Promise.all([
                 this.loadSphereScript('./js/vendor/three-r128.min.js', 'THREE'),
@@ -314,18 +356,13 @@ class App {
                 this.isMobile,
                 this.isDebug,
                 () => { if (!this.isSlideshowActive) this.toggleMagnifier(); },
-                (loaded, total) => {
-                    this.ui.loadingProgress.max = total || 1;
-                    this.ui.loadingProgress.value = loaded;
-                    if (loaded === total) this.ui.loadingIndicator.hidden = true;
-                }
+                this.thumbnailSettled
             );
             this.sphereReady = true;
             button.removeAttribute('title');
             return true;
         } catch (error) {
             this.log('3D view unavailable, showing the grid.', error);
-            this.ui.loadingIndicator.hidden = true;
             button.title = '3D could not load. Select 3D to try again.';
             this.ui.sphereHint.hidden = false;
             this.ui.sphereHint.textContent = error.name === 'WebGLUnavailableError'
